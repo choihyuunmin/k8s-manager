@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== K8s Manager Build ==="
 
-echo "[1/4] Installing backend dependencies..."
+echo "[1/2] Installing backend dependencies..."
 cd "$SCRIPT_DIR/backend"
 if [ ! -d "venv" ]; then
     python3 -m venv venv
@@ -13,16 +13,13 @@ fi
 source venv/bin/activate
 pip install -q -r requirements.txt
 
-echo "[2/4] Installing frontend dependencies..."
-cd "$SCRIPT_DIR/frontend"
-npm install --silent
-
-echo "[3/4] Building frontend..."
-npm run build
-
-echo "[4/4] Copying frontend build to backend/static..."
-rm -rf "$SCRIPT_DIR/backend/static"
-cp -r "$SCRIPT_DIR/frontend/dist" "$SCRIPT_DIR/backend/static"
+echo "[2/2] Setting up frontend static files..."
+if [ ! -d "$SCRIPT_DIR/backend/static" ]; then
+    cp -r "$SCRIPT_DIR/frontend/dist" "$SCRIPT_DIR/backend/static"
+    echo "  Copied pre-built frontend to backend/static"
+else
+    echo "  backend/static already exists, skipping"
+fi
 
 echo ""
 echo "=== Build complete ==="

@@ -6,10 +6,6 @@ venv/
 
 # Node
 node_modules/
-dist/
-
-# Backend static (built from frontend)
-backend/static/
 
 # Uploads
 backend/uploads/
