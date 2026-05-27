@@ -1,0 +1,212 @@
+import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react'
+import { Upload, HardDrive, Play } from 'lucide-react'
+import { imageApi, nodeApi } from '../api/client'
+import DataTable, { type Column } from '../components/DataTable'
+import StatusBadge from '../components/StatusBadge'
+import LoadingSpinner from '../components/LoadingSpinner'
+import Modal from '../components/Modal'
+
+interface ImageRecord {
+  id: number
+  filename: string
+  image_name: string
+  target_nodes: string
+  status: string
+  created_at: string
+  [key: string]: unknown
+}
+
+interface NodeRecord {
+  id: number
+  name: string
+  [key: string]: unknown
+}
+
+export default function ImagesPage() {
+  const [images, setImages] = useState<ImageRecord[]>([])
+  const [nodes, setNodes] = useState<NodeRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [dragActive, setDragActive] = useState(false)
+  const [loadModal, setLoadModal] = useState<ImageRecord | null>(null)
+  const [selectedNodes, setSelectedNodes] = useState<number[]>([])
+  const [loadingAction, setLoadingAction] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [imgRes, nodeRes] = await Promise.all([imageApi.list(), nodeApi.list()])
+      setImages(imgRes.data ?? [])
+      setNodes(nodeRes.data ?? [])
+    } catch {
+      setImages([])
+      setNodes([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleUpload = async (file: File) => {
+    setUploading(true)
+    setProgress(0)
+    try {
+      await imageApi.upload(file, setProgress)
+      await fetchData()
+    } catch {
+      alert('업로드에 실패했습니다.')
+    } finally {
+      setUploading(false)
+      setProgress(0)
+    }
+  }
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault()
+    setDragActive(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleUpload(file)
+  }
+
+  const handleLoad = async () => {
+    if (!loadModal || selectedNodes.length === 0) return
+    setLoadingAction(true)
+    try {
+      await imageApi.load(loadModal.id, selectedNodes)
+      setLoadModal(null)
+      setSelectedNodes([])
+      await fetchData()
+    } catch {
+      alert('이미지 로드에 실패했습니다.')
+    } finally {
+      setLoadingAction(false)
+    }
+  }
+
+  const toggleNode = (id: number) => {
+    setSelectedNodes((prev) =>
+      prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id],
+    )
+  }
+
+  const columns: Column<ImageRecord>[] = [
+    { key: 'filename', header: '파일명', sortable: true },
+    { key: 'image_name', header: '이미지명', sortable: true },
+    { key: 'target_nodes', header: '대상 노드', render: (r) => <span>{r.target_nodes || '-'}</span> },
+    { key: 'status', header: '상태', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'created_at', header: '업로드 일시', sortable: true },
+    {
+      key: 'actions',
+      header: '액션',
+      render: (r) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); setLoadModal(r); setSelectedNodes([]) }}
+          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+        >
+          <Play size={12} /> 로드
+        </button>
+      ),
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-slate-100">이미지 관리</h1>
+
+      <div
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+          dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-600 hover:border-slate-500 bg-slate-800'
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        onClick={() => fileRef.current?.click()}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".tar,.tar.gz,.tgz"
+          className="hidden"
+          onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }}
+        />
+        <Upload size={40} className="mx-auto mb-3 text-slate-400" />
+        <p className="text-slate-300 font-medium">이미지 파일을 드래그하거나 클릭하여 선택하세요</p>
+        <p className="text-sm text-slate-500 mt-1">.tar, .tar.gz, .tgz 형식 지원</p>
+      </div>
+
+      {uploading && (
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-slate-300">업로드 중...</span>
+            <span className="text-sm text-blue-400">{progress}%</span>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+            <HardDrive size={18} /> 이미지 목록
+          </h2>
+        </div>
+        {loading ? (
+          <LoadingSpinner text="이미지를 불러오는 중..." />
+        ) : (
+          <DataTable columns={columns} data={images} keyField="id" />
+        )}
+      </div>
+
+      <Modal
+        open={!!loadModal}
+        onClose={() => setLoadModal(null)}
+        title="이미지 로드 - 대상 노드 선택"
+        footer={
+          <>
+            <button
+              onClick={() => setLoadModal(null)}
+              className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleLoad}
+              disabled={selectedNodes.length === 0 || loadingAction}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+            >
+              {loadingAction ? '로드 중...' : '로드 실행'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-400 mb-4">
+          이미지를 로드할 노드를 선택하세요.
+        </p>
+        <div className="space-y-2 max-h-60 overflow-auto">
+          {nodes.map((n) => (
+            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={selectedNodes.includes(n.id)}
+                onChange={() => toggleNode(n.id)}
+                className="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 bg-slate-800"
+              />
+              <span className="text-sm text-slate-200">{n.name}</span>
+            </label>
+          ))}
+          {nodes.length === 0 && (
+            <p className="text-sm text-slate-500 text-center py-4">등록된 노드가 없습니다.</p>
+          )}
+        </div>
+      </Modal>
+    </div>
+  )
+}

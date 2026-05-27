@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+*.db
+
+# Node
+node_modules/
+dist/
+
+# Backend static (built from frontend)
+backend/static/
+
+# Uploads
+backend/uploads/
+
+# Env
+.env
+
+# OS
+.DS_Store
