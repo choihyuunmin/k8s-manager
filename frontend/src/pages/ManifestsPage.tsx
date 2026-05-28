@@ -98,7 +98,7 @@ export default function ManifestsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100">매니페스트</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">매니페스트</h1>
         <button
           onClick={() => navigate('/manifests/new')}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
@@ -109,9 +109,9 @@ export default function ManifestsPage() {
 
       <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="매니페스트 검색..." />
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
             <FileCode size={18} /> 매니페스트 목록
           </h2>
         </div>

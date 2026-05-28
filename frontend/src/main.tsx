@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { AuthProvider } from './hooks/useAuth'
+import { ThemeProvider } from './hooks/useTheme'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ClusterPage from './pages/ClusterPage'
@@ -19,6 +20,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
+      <ThemeProvider>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -39,6 +41,7 @@ createRoot(document.getElementById('root')!).render(
           </Route>
         </Routes>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </StrictMode>,
 )

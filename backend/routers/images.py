@@ -184,6 +184,8 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
         await db.close()
 
     ssh = SSHService()
+    errors = []
+    runtime_available = False
     try:
         ssh.connect(
             host=node["host"],
@@ -197,42 +199,56 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
         stdout, stderr, exit_code = ssh.execute_command(
             "docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'"
         )
-        if exit_code == 0 and stdout.strip():
-            images = []
-            for line in stdout.strip().splitlines():
-                parts = line.split(None, 3)
-                if len(parts) >= 3:
-                    repo_tag = parts[0].split(":", 1)
-                    images.append({
-                        "repository": repo_tag[0],
-                        "tag": repo_tag[1] if len(repo_tag) > 1 else "<none>",
-                        "id": parts[1],
-                        "size": parts[2],
-                    })
-            return images
+        if exit_code == 0:
+            runtime_available = True
+            if stdout.strip():
+                images = []
+                for line in stdout.strip().splitlines():
+                    parts = line.split(None, 3)
+                    if len(parts) >= 3:
+                        repo_tag = parts[0].split(":", 1)
+                        images.append({
+                            "repository": repo_tag[0],
+                            "tag": repo_tag[1] if len(repo_tag) > 1 else "<none>",
+                            "id": parts[1],
+                            "size": parts[2],
+                        })
+                if images:
+                    return images
+        else:
+            errors.append(f"docker: {(stderr or '').strip() or f'exit {exit_code}'}")
 
         # Try crictl
         stdout, stderr, exit_code = ssh.execute_command("crictl images -o json")
-        if exit_code == 0 and stdout.strip():
-            data = json.loads(stdout)
-            images = []
-            for img in data.get("images", []):
-                repo_tags = img.get("repoTags", [])
-                repo_tag = repo_tags[0] if repo_tags else "<none>:<none>"
-                parts = repo_tag.split(":", 1)
-                images.append({
-                    "repository": parts[0],
-                    "tag": parts[1] if len(parts) > 1 else "<none>",
-                    "id": img.get("id", ""),
-                    "size": img.get("size", ""),
-                })
-            return images
+        if exit_code == 0:
+            runtime_available = True
+            if stdout.strip():
+                try:
+                    data = json.loads(stdout)
+                    images = []
+                    for img in data.get("images", []):
+                        repo_tags = img.get("repoTags", [])
+                        repo_tag = repo_tags[0] if repo_tags else "<none>:<none>"
+                        parts = repo_tag.split(":", 1)
+                        images.append({
+                            "repository": parts[0],
+                            "tag": parts[1] if len(parts) > 1 else "<none>",
+                            "id": img.get("id", ""),
+                            "size": img.get("size", ""),
+                        })
+                    if images:
+                        return images
+                except json.JSONDecodeError as e:
+                    errors.append(f"crictl JSON parse: {e}")
+        else:
+            errors.append(f"crictl: {(stderr or '').strip() or f'exit {exit_code}'}")
 
         # Try ctr
         stdout, stderr, exit_code = ssh.execute_command("ctr -n k8s.io images list")
-        if exit_code == 0 and stdout.strip():
-            images = []
+        if exit_code == 0:
+            runtime_available = True
             lines = stdout.strip().splitlines()
+            images = []
             for line in lines[1:]:  # skip header
                 parts = line.split()
                 if len(parts) >= 4:
@@ -244,12 +260,22 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
                         "id": parts[2] if len(parts) > 2 else "",
                         "size": parts[3] if len(parts) > 3 else "",
                     })
-            return images
+            if images:
+                return images
+        else:
+            errors.append(f"ctr: {(stderr or '').strip() or f'exit {exit_code}'}")
+
+        if runtime_available:
+            return []
 
         raise HTTPException(
             status_code=500,
-            detail="No container runtime found (tried docker, crictl, ctr)",
+            detail=f"No container runtime accessible. Errors: {' | '.join(errors)}",
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SSH/runtime error: {e}")
     finally:
         ssh.close()
 

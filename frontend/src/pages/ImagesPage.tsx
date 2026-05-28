@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react'
-import { Upload, HardDrive, Play, RefreshCw, Server } from 'lucide-react'
+import { Upload, HardDrive, Play, RefreshCw, Server, Trash2, Info } from 'lucide-react'
 import { imageApi, nodeApi } from '../api/client'
 import DataTable, { type Column } from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { FilterSelect } from '../components/FilterBar'
 
 interface ImageRecord {
@@ -48,6 +49,8 @@ export default function ImagesPage() {
   const [application, setApplication] = useState('')
   const [applications, setApplications] = useState<string[]>([])
   const [appFilter, setAppFilter] = useState('all')
+  const [deleteTarget, setDeleteTarget] = useState<ImageRecord | null>(null)
+  const [nodeImagesError, setNodeImagesError] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Node images state
@@ -134,14 +137,27 @@ export default function ImagesPage() {
   const fetchNodeImages = async (nodeId: number) => {
     setNodeImagesLoading(true)
     setNodeImages([])
+    setNodeImagesError('')
     try {
       const res = await imageApi.getNodeImages(nodeId)
       setNodeImages(res.data ?? [])
-    } catch {
-      alert('노드 이미지 조회에 실패했습니다.')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setNodeImagesError(detail || '노드 이미지 조회에 실패했습니다.')
       setNodeImages([])
     } finally {
       setNodeImagesLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await imageApi.delete(deleteTarget.id)
+      setDeleteTarget(null)
+      await fetchData()
+    } catch {
+      alert('이미지 삭제에 실패했습니다.')
     }
   }
 
@@ -201,7 +217,7 @@ export default function ImagesPage() {
       header: '어플리케이션',
       sortable: true,
       render: (r) => r.application
-        ? <span className="px-2 py-0.5 text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full">{r.application}</span>
+        ? <span className="px-2 py-0.5 text-xs bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 rounded-full">{r.application}</span>
         : <span className="text-slate-500">-</span>,
     },
     { key: 'filename', header: '파일명', sortable: true },
@@ -213,12 +229,21 @@ export default function ImagesPage() {
       key: 'actions',
       header: '액션',
       render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); setLoadModal(r); setSelectedNodes([]) }}
-          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-        >
-          <Play size={12} /> 로드
-        </button>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => { setLoadModal(r); setSelectedNodes([]) }}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            <Play size={12} /> 로드
+          </button>
+          <button
+            onClick={() => setDeleteTarget(r)}
+            title="삭제"
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       ),
     },
   ]
@@ -244,13 +269,13 @@ export default function ImagesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-100">이미지 관리</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">이미지 관리</h1>
 
-      <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+      <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
         <button
           onClick={() => setTab('upload')}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            tab === 'upload' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+            tab === 'upload' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
           }`}
         >
           이미지 업로드
@@ -258,7 +283,7 @@ export default function ImagesPage() {
         <button
           onClick={() => setTab('node-images')}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            tab === 'node-images' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+            tab === 'node-images' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
           }`}
         >
           노드 이미지 조회
@@ -267,8 +292,8 @@ export default function ImagesPage() {
 
       {tab === 'upload' && (
         <>
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-            <label className="block text-sm text-slate-400 mb-2">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">
               어플리케이션 <span className="text-slate-600">(tar 파일을 어플리케이션 단위로 묶기 위한 식별자)</span>
             </label>
             <input
@@ -277,7 +302,7 @@ export default function ImagesPage() {
               value={application}
               onChange={(e) => setApplication(e.target.value)}
               placeholder="예: payment-api, user-service"
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
             <datalist id="image-application-list">
               {applications.map((a) => <option key={a} value={a} />)}
@@ -286,7 +311,7 @@ export default function ImagesPage() {
 
           <div
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
-              dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-600 hover:border-slate-500 bg-slate-800'
+              dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500 bg-white dark:bg-slate-800'
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
             onDragLeave={() => setDragActive(false)}
@@ -300,26 +325,26 @@ export default function ImagesPage() {
               className="hidden"
               onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }}
             />
-            <Upload size={40} className="mx-auto mb-3 text-slate-400" />
-            <p className="text-slate-300 font-medium">이미지 파일을 드래그하거나 클릭하여 선택하세요</p>
+            <Upload size={40} className="mx-auto mb-3 text-slate-600 dark:text-slate-400" />
+            <p className="text-slate-700 dark:text-slate-300 font-medium">이미지 파일을 드래그하거나 클릭하여 선택하세요</p>
             <p className="text-sm text-slate-500 mt-1">.tar, .tar.gz, .tgz 형식 지원</p>
           </div>
 
           {uploading && (
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-slate-300">업로드 중...</span>
-                <span className="text-sm text-blue-400">{progress}%</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300">업로드 중...</span>
+                <span className="text-sm text-blue-600 dark:text-blue-400">{progress}%</span>
               </div>
-              <div className="w-full bg-slate-700 rounded-full h-2">
+              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                 <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
 
-          <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap">
-              <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 flex-wrap">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <HardDrive size={18} /> 이미지 목록
               </h2>
               <FilterSelect
@@ -344,7 +369,15 @@ export default function ImagesPage() {
 
       {tab === 'node-images' && (
         <>
-          <div className="flex items-center gap-4 bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+            <Info size={16} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-800 dark:text-blue-200">
+              마스터 노드를 포함한 모든 노드는 <strong>SSH 노드 관리</strong>에서 먼저 등록되어 있어야 조회 가능합니다.
+              컨테이너 런타임 명령(crictl, ctr)은 root 권한이 필요할 수 있습니다.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <FilterSelect
               label="노드 선택"
               value={selectedNodeId ? String(selectedNodeId) : ''}
@@ -357,16 +390,22 @@ export default function ImagesPage() {
             {selectedNodeId && (
               <button
                 onClick={() => fetchNodeImages(selectedNodeId)}
-                className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
               >
                 <RefreshCw size={14} /> 새로고침
               </button>
             )}
           </div>
 
-          <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          {nodeImagesError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-700 dark:text-red-300 font-mono break-all">
+              {nodeImagesError}
+            </div>
+          )}
+
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <Server size={18} /> 노드 이미지 목록
               </h2>
             </div>
@@ -390,7 +429,7 @@ export default function ImagesPage() {
           <>
             <button
               onClick={() => setLoadModal(null)}
-              className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
             >
               취소
             </button>
@@ -404,17 +443,17 @@ export default function ImagesPage() {
           </>
         }
       >
-        <p className="text-sm text-slate-400 mb-4">이미지를 로드할 노드를 선택하세요.</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">이미지를 로드할 노드를 선택하세요.</p>
         <div className="space-y-2 max-h-60 overflow-auto">
           {nodes.map((n) => (
-            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
               <input
                 type="checkbox"
                 checked={selectedNodes.includes(n.id)}
                 onChange={() => toggleNode(n.id)}
-                className="w-4 h-4 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 bg-slate-800"
+                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 bg-white dark:bg-slate-800"
               />
-              <span className="text-sm text-slate-200">{n.name}</span>
+              <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
             </label>
           ))}
           {nodes.length === 0 && (
@@ -433,7 +472,7 @@ export default function ImagesPage() {
           <>
             <button
               onClick={() => setReplaceModal(null)}
-              className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
             >
               취소
             </button>
@@ -449,15 +488,15 @@ export default function ImagesPage() {
       >
         {replaceModal && (
           <div className="space-y-4">
-            <div className="bg-slate-900 rounded-lg p-3">
+            <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-3">
               <p className="text-xs text-slate-500 mb-1">교체 대상 이미지</p>
-              <p className="text-sm text-slate-200 font-mono">
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-mono">
                 {replaceModal.repository}{replaceModal.tag && replaceModal.tag !== '<none>' ? ':' + replaceModal.tag : ''}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm text-slate-400 mb-2">새 이미지 파일 (tar)</label>
+              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">새 이미지 파일 (tar)</label>
               <input
                 ref={replaceFileRef}
                 type="file"
@@ -467,7 +506,7 @@ export default function ImagesPage() {
               />
               <button
                 onClick={() => replaceFileRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors w-full justify-center"
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors w-full justify-center"
               >
                 <Upload size={14} />
                 {replaceFile ? replaceFile.name : '파일 선택...'}
@@ -477,27 +516,27 @@ export default function ImagesPage() {
             {replacing && replaceProgress > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-slate-400">업로드 중...</span>
-                  <span className="text-xs text-blue-400">{replaceProgress}%</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">업로드 중...</span>
+                  <span className="text-xs text-blue-600 dark:text-blue-400">{replaceProgress}%</span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-1.5">
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
                   <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${replaceProgress}%` }} />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-sm text-slate-400 mb-2">대상 노드</label>
+              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">대상 노드</label>
               <div className="space-y-2 max-h-40 overflow-auto">
                 {nodes.map((n) => (
-                  <label key={n.id} className="flex items-center gap-3 p-2.5 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+                  <label key={n.id} className="flex items-center gap-3 p-2.5 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
                     <input
                       type="checkbox"
                       checked={replaceNodes.includes(n.id)}
                       onChange={() => toggleReplaceNode(n.id)}
-                      className="w-4 h-4 rounded border-slate-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-0 bg-slate-800"
+                      className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-0 bg-white dark:bg-slate-800"
                     />
-                    <span className="text-sm text-slate-200">{n.name}</span>
+                    <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
                   </label>
                 ))}
               </div>
@@ -509,6 +548,15 @@ export default function ImagesPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="이미지 삭제"
+        message={`"${deleteTarget?.filename}" 이미지를 삭제하시겠습니까? 파일과 이력이 모두 제거됩니다.`}
+        confirmText="삭제"
+      />
     </div>
   )
 }

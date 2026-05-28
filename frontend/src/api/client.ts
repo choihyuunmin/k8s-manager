@@ -62,6 +62,7 @@ export const imageApi = {
   replace: (data: { image_id: number; node_ids: number[]; target_image: string; restart_deployments: boolean }) =>
     client.post('/api/images/replace', data),
   getApplications: () => client.get<string[]>('/api/images/applications'),
+  delete: (imageId: number) => client.delete(`/api/images/${imageId}`),
 }
 
 export const manifestApi = {

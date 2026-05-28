@@ -76,9 +76,9 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-100">로그 뷰어</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">로그 뷰어</h1>
 
-      <div className="flex flex-wrap items-end gap-4 bg-slate-800 border border-slate-700 rounded-xl p-4">
+      <div className="flex flex-wrap items-end gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
         <FilterSelect
           label="네임스페이스"
           value={namespace}
@@ -107,12 +107,12 @@ export default function LogsPage() {
           ]}
         />
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-400">Tail</span>
+          <span className="text-sm text-slate-600 dark:text-slate-400">Tail</span>
           <input
             type="number"
             value={tail}
             onChange={(e) => setTail(Number(e.target.value) || 100)}
-            className="w-20 px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-20 px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         <button
@@ -129,38 +129,38 @@ export default function LogsPage() {
 
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
           <input
             type="text"
             value={logFilter}
             onChange={(e) => setLogFilter(e.target.value)}
             placeholder="로그 필터링..."
-            className="w-full pl-9 pr-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         <button
           onClick={clear}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors"
         >
           <Trash2 size={14} /> 지우기
         </button>
         <button
           onClick={handleDownload}
           disabled={messages.length === 0}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 border border-slate-700 rounded-lg transition-colors"
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors"
         >
           <Download size={14} /> 다운로드
         </button>
         {isConnected && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-400">
+          <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             연결됨
           </span>
         )}
       </div>
 
-      <div className="bg-slate-950 border border-slate-700 rounded-xl overflow-hidden">
-        <div className="h-[500px] overflow-auto p-4 font-mono text-xs leading-5 text-slate-300">
+      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+        <div className="h-[500px] overflow-auto p-4 font-mono text-xs leading-5 text-slate-700 dark:text-slate-300">
           {filteredMessages.length === 0 ? (
             <p className="text-slate-600 text-center mt-20">
               {messages.length === 0
@@ -169,7 +169,7 @@ export default function LogsPage() {
             </p>
           ) : (
             filteredMessages.map((msg, i) => (
-              <div key={i} className="hover:bg-slate-900/50 px-1 rounded">
+              <div key={i} className="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 px-1 rounded">
                 {msg}
               </div>
             ))

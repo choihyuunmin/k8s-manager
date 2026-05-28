@@ -76,7 +76,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
         <History size={24} /> 히스토리
       </h1>
 
@@ -106,24 +106,24 @@ export default function HistoryPage() {
           ]}
         />
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-400">기간</span>
+          <span className="text-sm text-slate-600 dark:text-slate-400">기간</span>
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            className="px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
           />
           <span className="text-slate-500">~</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            className="px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
       </FilterBar>
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">
         {loading ? (
           <LoadingSpinner text="히스토리를 불러오는 중..." />
         ) : (

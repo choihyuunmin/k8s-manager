@@ -130,9 +130,9 @@ export default function ClusterPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-100">클러스터 상태</h1>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">클러스터 상태</h1>
 
-      <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+      <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -140,7 +140,7 @@ export default function ClusterPage() {
             className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
               tab === t.key
                 ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
             {t.label}
@@ -150,7 +150,7 @@ export default function ClusterPage() {
 
       <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="리소스 검색..." />
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="데이터를 불러오는 중..." />
         ) : (
@@ -170,7 +170,7 @@ export default function ClusterPage() {
         width="max-w-2xl"
       >
         {detail && (
-          <pre className="text-sm text-slate-300 bg-slate-950 p-4 rounded-lg overflow-auto max-h-96 font-mono">
+          <pre className="text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-950 p-4 rounded-lg overflow-auto max-h-96 font-mono">
             {JSON.stringify(detail, null, 2)}
           </pre>
         )}

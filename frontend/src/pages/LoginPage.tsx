@@ -34,38 +34,38 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-900">
+    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
       <div className="w-full max-w-sm mx-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 shadow-xl">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 shadow-xl">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-blue-400">K8s Manager</h1>
-            <p className="text-sm text-slate-400 mt-2">클러스터 관리 시스템에 로그인</p>
+            <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">K8s Manager</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">클러스터 관리 시스템에 로그인</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm text-slate-300 mb-1.5">사용자명</label>
+              <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1.5">사용자명</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="사용자명 입력"
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-300 mb-1.5">비밀번호</label>
+              <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1.5">비밀번호</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="비밀번호 입력"
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
 
             {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              <p className="text-sm text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                 {error}
               </p>
             )}

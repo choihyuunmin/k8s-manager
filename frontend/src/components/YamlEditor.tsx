@@ -40,9 +40,9 @@ export default function YamlEditor({ value, onChange, readOnly = false, minHeigh
   }, [])
 
   return (
-    <div className="relative flex border border-slate-600 rounded-lg overflow-hidden" style={{ minHeight }}>
+    <div className="relative flex border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden" style={{ minHeight }}>
       <div
-        className="line-numbers flex-shrink-0 w-12 bg-slate-950 border-r border-slate-700 text-right select-none overflow-hidden"
+        className="line-numbers flex-shrink-0 w-12 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-700 text-right select-none overflow-hidden"
         style={{ minHeight }}
       >
         <div className="py-3 px-2">
@@ -61,7 +61,7 @@ export default function YamlEditor({ value, onChange, readOnly = false, minHeigh
         onScroll={handleScroll}
         readOnly={readOnly}
         spellCheck={false}
-        className="flex-1 bg-slate-950 text-slate-200 font-mono text-sm leading-[20px] p-3 resize-none focus:outline-none"
+        className="flex-1 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-mono text-sm leading-[20px] p-3 resize-none focus:outline-none"
         style={{ minHeight, tabSize: 2 }}
       />
     </div>

@@ -126,13 +126,13 @@ export default function NodesPage() {
           </button>
           <button
             onClick={() => openEdit(r)}
-            className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded transition-colors"
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
           >
             <Pencil size={14} />
           </button>
           <button
             onClick={() => setDeleteTarget(r)}
-            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
           >
             <Trash2 size={14} />
           </button>
@@ -144,7 +144,7 @@ export default function NodesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <Monitor size={24} /> SSH 노드 관리
         </h1>
         <button
@@ -155,7 +155,7 @@ export default function NodesPage() {
         </button>
       </div>
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="노드를 불러오는 중..." />
         ) : (
@@ -171,7 +171,7 @@ export default function NodesPage() {
           <>
             <button
               onClick={() => setModal(false)}
-              className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
             >
               취소
             </button>
@@ -187,54 +187,54 @@ export default function NodesPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">이름 *</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">이름 *</label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="node-1"
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <label className="block text-sm text-slate-400 mb-1">호스트 *</label>
+              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">호스트 *</label>
               <input
                 type="text"
                 value={form.host}
                 onChange={(e) => setForm({ ...form, host: e.target.value })}
                 placeholder="192.168.1.100"
-                className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">포트</label>
+              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">포트</label>
               <input
                 type="number"
                 value={form.port}
                 onChange={(e) => setForm({ ...form, port: Number(e.target.value) || 22 })}
-                className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">사용자명 *</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">사용자명 *</label>
             <input
               type="text"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               placeholder="root"
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">비밀번호</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">비밀번호</label>
             <input
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               placeholder={editTarget ? '변경하지 않으려면 비워두세요' : '비밀번호'}
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
         </div>

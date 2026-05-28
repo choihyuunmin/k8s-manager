@@ -28,7 +28,7 @@ export default function Timeline({ items }: TimelineProps) {
 
   return (
     <div className="relative">
-      <div className="absolute left-5 top-0 bottom-0 w-px bg-slate-700" />
+      <div className="absolute left-5 top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-700" />
       <div className="space-y-6">
         {items.map((item) => (
           <div key={item.id} className="relative flex items-start gap-4 pl-12">
@@ -37,13 +37,13 @@ export default function Timeline({ items }: TimelineProps) {
                 dotColors[item.color ?? 'blue']
               }`}
             />
-            <div className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-4">
+            <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-slate-400">{item.icon}</span>
+                <span className="text-slate-600 dark:text-slate-400">{item.icon}</span>
                 <span className="text-xs text-slate-500">{item.timestamp}</span>
               </div>
-              <h4 className="text-sm font-medium text-slate-200">{item.title}</h4>
-              <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+              <h4 className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.title}</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{item.description}</p>
             </div>
           </div>
         ))}

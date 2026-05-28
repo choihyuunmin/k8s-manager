@@ -19,10 +19,10 @@ interface Issue {
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
-  critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+  critical: 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30',
   high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  medium: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
+  low: 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30',
 }
 
 export default function IssuesPage() {
@@ -148,7 +148,7 @@ export default function IssuesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <AlertCircle size={24} /> 이슈 관리
         </h1>
         <button
@@ -185,7 +185,7 @@ export default function IssuesPage() {
         />
       </FilterBar>
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="이슈를 불러오는 중..." />
         ) : (
@@ -202,7 +202,7 @@ export default function IssuesPage() {
           <>
             <button
               onClick={() => setModal(false)}
-              className="px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
             >
               취소
             </button>
@@ -218,41 +218,41 @@ export default function IssuesPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1">제목</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">제목</label>
             <input
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="이슈 제목"
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">설명</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">설명</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="이슈 설명"
               rows={4}
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors resize-none"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">관련 리소스</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">관련 리소스</label>
             <input
               type="text"
               value={form.resource}
               onChange={(e) => setForm({ ...form, resource: e.target.value })}
               placeholder="예: deployment/my-app"
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1">심각도</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">심각도</label>
             <select
               value={form.severity}
               onChange={(e) => setForm({ ...form, severity: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>

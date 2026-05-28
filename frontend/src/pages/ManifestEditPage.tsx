@@ -161,42 +161,42 @@ export default function ManifestEditPage() {
       <div className="flex items-center gap-4">
         <button
           onClick={() => navigate('/manifests')}
-          className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-lg transition-colors"
+          className="p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
         >
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-2xl font-bold text-slate-100">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {isNew ? '새 매니페스트' : '매니페스트 편집'}
         </h1>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4 bg-slate-800 border border-slate-700 rounded-xl p-4">
+      <div className="flex flex-wrap items-end gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm text-slate-400 mb-1">이름</label>
+          <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">이름</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="매니페스트 이름"
-            className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         <div>
-          <label className="block text-sm text-slate-400 mb-1">종류</label>
+          <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">종류</label>
           <input
             type="text"
             value={kind}
             onChange={(e) => setKind(e.target.value)}
-            className="w-36 px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-36 px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         <div>
-          <label className="block text-sm text-slate-400 mb-1">네임스페이스</label>
+          <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">네임스페이스</label>
           <input
             type="text"
             value={namespace}
             onChange={(e) => setNamespace(e.target.value)}
-            className="w-36 px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-36 px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         {isNew && (
@@ -234,12 +234,12 @@ export default function ManifestEditPage() {
           <YamlEditor value={content} onChange={setContent} />
         </div>
         <div className="flex-[2] space-y-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-200 mb-3">액션</h3>
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">액션</h3>
             <div className="space-y-2">
               <button
                 onClick={handleValidate}
-                className="flex items-center gap-2 w-full px-4 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors"
+                className="flex items-center gap-2 w-full px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-lg transition-colors"
               >
                 <CheckCircle size={16} /> YAML 검증
               </button>
@@ -269,16 +269,16 @@ export default function ManifestEditPage() {
                   : 'bg-red-500/10 border-red-500/30'
               }`}
             >
-              <p className={`text-sm font-medium ${validationResult.valid ? 'text-emerald-400' : 'text-red-400'}`}>
+              <p className={`text-sm font-medium ${validationResult.valid ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                 {validationResult.valid ? '유효한 YAML입니다.' : '유효하지 않은 YAML'}
               </p>
-              <p className="text-sm text-slate-400 mt-1">{validationResult.message}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{validationResult.message}</p>
             </div>
           )}
 
-          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-200 mb-2">YAML 가이드</h3>
-            <ul className="text-xs text-slate-400 space-y-1.5 list-disc list-inside">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">YAML 가이드</h3>
+            <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 list-disc list-inside">
               <li>들여쓰기에 스페이스 2칸을 사용하세요</li>
               <li>탭 키로 2칸 들여쓰기를 할 수 있습니다</li>
               <li>apiVersion, kind, metadata, spec은 필수 필드입니다</li>

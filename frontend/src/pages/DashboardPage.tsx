@@ -109,20 +109,20 @@ export default function DashboardPage() {
   }
 
   const cards = [
-    { label: '노드', value: summary.nodes, icon: Server, color: 'text-blue-400' },
-    { label: '파드', value: summary.pods, icon: Box, color: 'text-emerald-400' },
-    { label: '디플로이먼트', value: summary.deployments, icon: Layers, color: 'text-amber-400' },
-    { label: '서비스', value: summary.services, icon: Globe, color: 'text-purple-400' },
+    { label: '노드', value: summary.nodes, icon: Server, color: 'text-blue-600 dark:text-blue-400' },
+    { label: '파드', value: summary.pods, icon: Box, color: 'text-emerald-600 dark:text-emerald-400' },
+    { label: '디플로이먼트', value: summary.deployments, icon: Layers, color: 'text-amber-600 dark:text-amber-400' },
+    { label: '서비스', value: summary.services, icon: Globe, color: 'text-purple-600 dark:text-purple-400' },
   ]
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-100">대시보드</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">대시보드</h1>
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
           className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
-            autoRefresh ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            autoRefresh ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
           }`}
         >
           <RefreshCw size={14} className={autoRefresh ? 'animate-spin' : ''} />
@@ -132,11 +132,11 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-slate-800 border border-slate-700 rounded-xl p-5">
+          <div key={label} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-400">{label}</p>
-                <p className="text-3xl font-bold text-slate-100 mt-1">{value}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">{label}</p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">{value}</p>
               </div>
               <Icon size={32} className={color} />
             </div>
@@ -170,7 +170,7 @@ export default function DashboardPage() {
         />
         <button
           onClick={savePreset}
-          className="px-3 py-2 text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+          className="px-3 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
         >
           프리셋 저장
         </button>
@@ -182,13 +182,13 @@ export default function DashboardPage() {
             <div key={i} className="flex items-center gap-1">
               <button
                 onClick={() => loadPreset(p)}
-                className="px-3 py-1 text-xs bg-blue-500/15 text-blue-400 border border-blue-500/30 rounded-full hover:bg-blue-500/25 transition-colors"
+                className="px-3 py-1 text-xs bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 rounded-full hover:bg-blue-500/25 transition-colors"
               >
                 {p.name}
               </button>
               <button
                 onClick={() => deletePreset(i)}
-                className="text-slate-500 hover:text-red-400 text-xs transition-colors"
+                className="text-slate-500 hover:text-red-600 dark:hover:text-red-400 text-xs transition-colors"
               >
                 ×
               </button>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="리소스를 불러오는 중..." />
         ) : (
