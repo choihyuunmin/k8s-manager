@@ -33,8 +33,6 @@ interface NodeImage {
   [key: string]: unknown
 }
 
-type TabKey = 'upload' | 'node-images'
-
 interface UploadTask {
   id: string
   filename: string
@@ -45,7 +43,6 @@ interface UploadTask {
 }
 
 export default function ImagesPage() {
-  const [tab, setTab] = useState<TabKey>('upload')
   const [images, setImages] = useState<ImageRecord[]>([])
   const [nodes, setNodes] = useState<NodeRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -267,7 +264,28 @@ export default function ImagesPage() {
     },
     { key: 'filename', header: '파일명', sortable: true },
     { key: 'image_name', header: '이미지명', sortable: true },
-    { key: 'target_nodes', header: '대상 노드', render: (r) => <span>{r.target_nodes || '-'}</span> },
+    {
+      key: 'target_nodes',
+      header: '배포 노드',
+      render: (r) => {
+        const raw = (r.target_nodes || '').trim()
+        if (!raw) return <span className="text-slate-500">-</span>
+        const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+        // Legacy data may store numeric IDs; resolve to names if matched.
+        const labels = parts.map((p) => {
+          if (/^\d+$/.test(p)) {
+            const found = nodes.find((n) => String(n.id) === p)
+            return found?.name ?? p
+          }
+          return p
+        })
+        return (
+          <span className="text-xs text-slate-700 dark:text-slate-300" title={labels.join(', ')}>
+            {labels.length}개 · {labels.slice(0, 2).join(', ')}{labels.length > 2 ? ' …' : ''}
+          </span>
+        )
+      },
+    },
     { key: 'status', header: '상태', render: (r) => <StatusBadge status={r.status} /> },
     { key: 'created_at', header: '업로드 일시', sortable: true },
     {
@@ -325,27 +343,7 @@ export default function ImagesPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">이미지 관리</h1>
 
-      <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
-        <button
-          onClick={() => setTab('upload')}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            tab === 'upload' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-          }`}
-        >
-          이미지 업로드
-        </button>
-        <button
-          onClick={() => setTab('node-images')}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-            tab === 'node-images' ? 'bg-blue-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-          }`}
-        >
-          노드 이미지 조회
-        </button>
-      </div>
-
-      {tab === 'upload' && (
-        <>
+      <>
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">
               어플리케이션 <span className="text-slate-600">(tar 파일을 어플리케이션 단위로 묶기 위한 식별자)</span>
@@ -458,11 +456,9 @@ export default function ImagesPage() {
               <DataTable columns={uploadColumns} data={filteredImages} keyField="id" />
             )}
           </div>
-        </>
-      )}
 
-      {tab === 'node-images' && (
-        <>
+          <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-3">노드 이미지 조회</h2>
           <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
             <Info size={16} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-blue-800 dark:text-blue-200">
@@ -511,8 +507,8 @@ export default function ImagesPage() {
               <DataTable columns={nodeImageColumns} data={nodeImages} keyField="id" />
             )}
           </div>
-        </>
-      )}
+          </div>
+      </>
 
       {/* Load Modal */}
       <Modal

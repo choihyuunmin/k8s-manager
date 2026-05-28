@@ -46,15 +46,36 @@ async def upload_image(
     db = await get_db()
     try:
         now = datetime.now(timezone.utc).isoformat()
-        await db.execute(
-            "INSERT INTO image_history (filename, application, status, loaded_by, created_at) VALUES (?, ?, ?, ?, ?)",
-            (file.filename, app_value, "uploaded", current_user["username"], now),
+        # If a row already exists for this filename, update it (reset to 'uploaded' state)
+        cursor = await db.execute(
+            "SELECT id FROM image_history WHERE filename = ? ORDER BY id DESC LIMIT 1",
+            (file.filename,),
         )
+        existing = await cursor.fetchone()
+        if existing:
+            image_id = existing[0]
+            await db.execute(
+                """UPDATE image_history
+                   SET application = ?, status = 'uploaded', target_nodes = NULL,
+                       loaded_by = ?, created_at = ?
+                   WHERE id = ?""",
+                (app_value, current_user["username"], now, image_id),
+            )
+            # Clean up older duplicate rows for the same filename (legacy data)
+            await db.execute(
+                "DELETE FROM image_history WHERE filename = ? AND id != ?",
+                (file.filename, image_id),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO image_history (filename, application, status, loaded_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                (file.filename, app_value, "uploaded", current_user["username"], now),
+            )
+            cursor = await db.execute("SELECT last_insert_rowid()")
+            image_id = (await cursor.fetchone())[0]
         await db.commit()
-        cursor = await db.execute("SELECT last_insert_rowid()")
-        row = await cursor.fetchone()
         return {
-            "id": row[0],
+            "id": image_id,
             "filename": file.filename,
             "application": app_value,
             "status": "uploaded",
@@ -65,12 +86,25 @@ async def upload_image(
 
 
 @router.get("")
-async def list_images(current_user: dict = Depends(get_current_user)):
+async def list_images(
+    include_loaded: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """List images. By default excludes already-loaded ones (use ?include_loaded=true to see all).
+    Dedupes by filename (keeps the most recent row per filename)."""
     db = await get_db()
     try:
-        cursor = await db.execute("SELECT * FROM image_history ORDER BY created_at DESC")
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        cursor = await db.execute(
+            """SELECT h.* FROM image_history h
+               WHERE h.id = (
+                   SELECT MAX(h2.id) FROM image_history h2 WHERE h2.filename = h.filename
+               )
+               ORDER BY h.created_at DESC"""
+        )
+        rows = [dict(r) for r in await cursor.fetchall()]
+        if not include_loaded:
+            rows = [r for r in rows if r.get("status") != "loaded"]
+        return rows
     finally:
         await db.close()
 
@@ -110,16 +144,12 @@ async def load_image_by_id(
             except Exception as e:
                 results.append({"status": "failed", "node": node["host"], "message": str(e)})
 
-        target_nodes = ",".join(str(n) for n in req.node_ids)
+        target_nodes = ",".join(n["name"] for n in nodes)
         overall_status = "loaded" if all(r["status"] == "success" for r in results) else "partial_failure"
-        now = datetime.now(timezone.utc).isoformat()
 
         await db.execute(
-            """INSERT INTO image_history
-               (filename, application, image_name, image_tag, target_nodes, status, loaded_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (image["filename"], image.get("application"), image.get("image_name"), image.get("image_tag"),
-             target_nodes, overall_status, current_user["username"], now),
+            "UPDATE image_history SET status = ?, target_nodes = ?, loaded_by = ? WHERE id = ?",
+            (overall_status, target_nodes, current_user["username"], image_id),
         )
         await db.commit()
         return {"status": overall_status, "results": results}
@@ -423,17 +453,12 @@ async def replace_image(
                         "message": f"Failed to restart {dep['namespace']}/{dep['name']}: {str(e)}",
                     })
 
-        # Record in history
-        target_nodes = ",".join(str(n) for n in req.node_ids)
-        overall_status = "replaced" if all(r["status"] == "success" for r in load_results) else "partial_failure"
-        now = datetime.now(timezone.utc).isoformat()
+        target_nodes = ",".join(n["name"] for n in nodes)
+        overall_status = "loaded" if all(r["status"] == "success" for r in load_results) else "partial_failure"
 
         await db.execute(
-            """INSERT INTO image_history
-               (filename, application, image_name, image_tag, target_nodes, status, loaded_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (image["filename"], image.get("application"), image.get("image_name"), image.get("image_tag"),
-             target_nodes, overall_status, current_user["username"], now),
+            "UPDATE image_history SET status = ?, target_nodes = ?, loaded_by = ? WHERE id = ?",
+            (overall_status, target_nodes, current_user["username"], req.image_id),
         )
         await db.commit()
 
