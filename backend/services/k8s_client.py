@@ -315,6 +315,50 @@ class K8sClient:
 
         return yaml.dump(resource_dict, default_flow_style=False, allow_unicode=True)
 
+    def _format_size(self, size_bytes: Optional[int]) -> str:
+        if not size_bytes:
+            return ""
+        for unit in ["B", "KiB", "MiB", "GiB", "TiB"]:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f} PiB"
+
+    def get_node_images(self, node_identifier: str) -> Optional[list[dict]]:
+        """Return images for a node from K8s API. Match by node name or any address.
+        Returns None if node not found in cluster."""
+        nodes = self.core_v1.list_node()
+        target = None
+        for n in nodes.items:
+            if n.metadata.name == node_identifier:
+                target = n
+                break
+            for addr in (n.status.addresses or []):
+                if addr.address == node_identifier:
+                    target = n
+                    break
+            if target:
+                break
+
+        if target is None:
+            return None
+
+        result = []
+        for img in (target.status.images or []):
+            names = list(img.names or [])
+            tagged = next((n for n in names if "@sha256" not in n), names[0] if names else "<none>:<none>")
+            digest = next((n for n in names if "@sha256" in n), "")
+            repo, _, tag = tagged.rpartition(":")
+            if not repo:
+                repo, tag = tagged, ""
+            result.append({
+                "repository": repo,
+                "tag": tag or "<none>",
+                "id": digest.split("@", 1)[1] if "@" in digest else "",
+                "size": self._format_size(img.size_bytes),
+            })
+        return result
+
     def find_deployments_by_image(self, image_name: str, namespace: Optional[str] = None) -> list[dict]:
         if namespace:
             deps = self.apps_v1.list_namespaced_deployment(namespace)

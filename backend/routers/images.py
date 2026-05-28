@@ -183,6 +183,18 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
     finally:
         await db.close()
 
+    # Try K8s API first (works for any node in cluster, including masters,
+    # and doesn't require SSH/sudo). Match by host or name.
+    try:
+        for candidate in (node.get("host"), node.get("name")):
+            if not candidate:
+                continue
+            images = k8s_client.get_node_images(candidate)
+            if images is not None:
+                return images
+    except Exception:
+        pass  # fall back to SSH
+
     ssh = SSHService()
     errors = []
     runtime_available = False
