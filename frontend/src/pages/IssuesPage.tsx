@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, CheckCircle, AlertCircle, Trash2 } from 'lucide-react'
 import { issueApi } from '../api/client'
 import DataTable, { type Column } from '../components/DataTable'
 import FilterBar, { FilterSelect } from '../components/FilterBar'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
+import ConfirmDialog from '../components/ConfirmDialog'
+import BulkActionBar from '../components/BulkActionBar'
 
 interface Issue {
   id: string
@@ -35,6 +37,9 @@ export default function IssuesPage() {
   const [editTarget, setEditTarget] = useState<Issue | null>(null)
   const [form, setForm] = useState({ title: '', description: '', resource: '', severity: 'medium' })
   const [saving, setSaving] = useState(false)
+  const [selected, setSelected] = useState<Array<string | number>>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkResolving, setBulkResolving] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -99,6 +104,29 @@ export default function IssuesPage() {
     } catch {
       alert('상태 변경에 실패했습니다.')
     }
+  }
+
+  const handleBulkResolve = async () => {
+    setBulkResolving(true)
+    let failed = 0
+    for (const id of selected) {
+      try { await issueApi.update(String(id), { status: 'resolved' }) } catch { failed++ }
+    }
+    setBulkResolving(false)
+    setSelected([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 해결 처리 실패`)
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    let failed = 0
+    for (const id of selected) {
+      try { await issueApi.delete(String(id)) } catch { failed++ }
+    }
+    setSelected([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 삭제 실패`)
   }
 
   const filtered = issues.filter((iss) => {
@@ -185,13 +213,46 @@ export default function IssuesPage() {
         />
       </FilterBar>
 
+      <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+        <button
+          onClick={handleBulkResolve}
+          disabled={bulkResolving}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <CheckCircle size={12} /> {bulkResolving ? '처리 중...' : '일괄 해결'}
+        </button>
+        <button
+          onClick={() => setBulkDeleteOpen(true)}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+        >
+          <Trash2 size={12} /> 일괄 삭제
+        </button>
+      </BulkActionBar>
+
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="이슈를 불러오는 중..." />
         ) : (
-          <DataTable columns={columns} data={filtered} keyField="id" onRowClick={openEdit} />
+          <DataTable
+            columns={columns}
+            data={filtered}
+            keyField="id"
+            onRowClick={openEdit}
+            selectable
+            selectedKeys={selected}
+            onSelectionChange={setSelected}
+          />
         )}
       </div>
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="이슈 일괄 삭제"
+        message={`선택한 ${selected.length}개 이슈를 삭제하시겠습니까?`}
+        confirmText="삭제"
+      />
 
       <Modal
         open={modal}

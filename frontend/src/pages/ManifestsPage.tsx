@@ -6,6 +6,7 @@ import DataTable, { type Column } from '../components/DataTable'
 import FilterBar from '../components/FilterBar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ConfirmDialog from '../components/ConfirmDialog'
+import BulkActionBar from '../components/BulkActionBar'
 import { useNamespaceParam } from '../hooks/useNamespace'
 
 interface Manifest {
@@ -24,6 +25,9 @@ export default function ManifestsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Manifest | null>(null)
+  const [selected, setSelected] = useState<Array<string | number>>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkApplying, setBulkApplying] = useState(false)
   const navigate = useNavigate()
 
   const fetchData = useCallback(async () => {
@@ -58,6 +62,29 @@ export default function ManifestsPage() {
     } catch {
       alert('매니페스트 삭제에 실패했습니다.')
     }
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    let failed = 0
+    for (const id of selected) {
+      try { await manifestApi.delete(String(id)) } catch { failed++ }
+    }
+    setSelected([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 삭제 실패`)
+  }
+
+  const handleBulkApply = async () => {
+    setBulkApplying(true)
+    let failed = 0
+    for (const id of selected) {
+      try { await manifestApi.apply(String(id)) } catch { failed++ }
+    }
+    setBulkApplying(false)
+    setSelected([])
+    if (failed > 0) alert(`${failed}개 적용 실패`)
+    else alert(`${selected.length}개 매니페스트가 적용되었습니다.`)
   }
 
   const filtered = manifests.filter((m) => {
@@ -109,6 +136,22 @@ export default function ManifestsPage() {
 
       <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="매니페스트 검색..." />
 
+      <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+        <button
+          onClick={handleBulkApply}
+          disabled={bulkApplying}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <Play size={12} /> {bulkApplying ? '적용 중...' : '일괄 적용'}
+        </button>
+        <button
+          onClick={() => setBulkDeleteOpen(true)}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+        >
+          <Trash2 size={12} /> 일괄 삭제
+        </button>
+      </BulkActionBar>
+
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -123,6 +166,9 @@ export default function ManifestsPage() {
             data={filtered}
             keyField="id"
             onRowClick={(r) => navigate(`/manifests/${r.id}`)}
+            selectable
+            selectedKeys={selected}
+            onSelectionChange={setSelected}
           />
         )}
       </div>
@@ -133,6 +179,15 @@ export default function ManifestsPage() {
         onConfirm={handleDelete}
         title="매니페스트 삭제"
         message={`"${deleteTarget?.name}" 매니페스트를 삭제하시겠습니까?`}
+        confirmText="삭제"
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="매니페스트 일괄 삭제"
+        message={`선택한 ${selected.length}개 매니페스트를 삭제하시겠습니까?`}
         confirmText="삭제"
       />
     </div>

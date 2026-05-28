@@ -6,6 +6,7 @@ import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
+import BulkActionBar from '../components/BulkActionBar'
 import { FilterSelect } from '../components/FilterBar'
 
 interface ImageRecord {
@@ -56,6 +57,11 @@ export default function ImagesPage() {
   const [appFilter, setAppFilter] = useState('all')
   const [deleteTarget, setDeleteTarget] = useState<ImageRecord | null>(null)
   const [deleteNodeImageTarget, setDeleteNodeImageTarget] = useState<NodeImage | null>(null)
+  const [selectedImages, setSelectedImages] = useState<Array<string | number>>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkLoadOpen, setBulkLoadOpen] = useState(false)
+  const [bulkLoadNodes, setBulkLoadNodes] = useState<number[]>([])
+  const [bulkLoading, setBulkLoading] = useState(false)
   const [nodeImagesError, setNodeImagesError] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -186,6 +192,36 @@ export default function ImagesPage() {
     } catch {
       alert('이미지 삭제에 실패했습니다.')
     }
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    let failed = 0
+    for (const id of selectedImages) {
+      try { await imageApi.delete(Number(id)) } catch { failed++ }
+    }
+    setSelectedImages([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 삭제 실패`)
+  }
+
+  const handleBulkLoad = async () => {
+    if (bulkLoadNodes.length === 0) return
+    setBulkLoading(true)
+    let failed = 0
+    for (const id of selectedImages) {
+      try { await imageApi.load(Number(id), bulkLoadNodes) } catch { failed++ }
+    }
+    setBulkLoading(false)
+    setBulkLoadOpen(false)
+    setBulkLoadNodes([])
+    setSelectedImages([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 로드 실패`)
+  }
+
+  const toggleBulkLoadNode = (id: number) => {
+    setBulkLoadNodes((prev) => prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id])
   }
 
   const handleDeleteNodeImage = async () => {
@@ -434,6 +470,21 @@ export default function ImagesPage() {
             </div>
           )}
 
+          <BulkActionBar count={selectedImages.length} onClear={() => setSelectedImages([])}>
+            <button
+              onClick={() => { setBulkLoadNodes([]); setBulkLoadOpen(true) }}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            >
+              <Play size={12} /> 일괄 로드
+            </button>
+            <button
+              onClick={() => setBulkDeleteOpen(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+            >
+              <Trash2 size={12} /> 일괄 삭제
+            </button>
+          </BulkActionBar>
+
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -453,7 +504,14 @@ export default function ImagesPage() {
             {loading ? (
               <LoadingSpinner text="이미지를 불러오는 중..." />
             ) : (
-              <DataTable columns={uploadColumns} data={filteredImages} keyField="id" />
+              <DataTable
+                columns={uploadColumns}
+                data={filteredImages}
+                keyField="id"
+                selectable
+                selectedKeys={selectedImages}
+                onSelectionChange={setSelectedImages}
+              />
             )}
           </div>
 
@@ -656,6 +714,53 @@ export default function ImagesPage() {
         message={`"${deleteNodeImageTarget?.repository}${deleteNodeImageTarget?.tag && deleteNodeImageTarget.tag !== '<none>' ? ':' + deleteNodeImageTarget.tag : ''}" 이미지를 이 노드에서 제거하시겠습니까?`}
         confirmText="삭제"
       />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="이미지 일괄 삭제"
+        message={`선택한 ${selectedImages.length}개 이미지를 삭제하시겠습니까? 파일과 이력이 모두 제거됩니다.`}
+        confirmText="삭제"
+      />
+
+      <Modal
+        open={bulkLoadOpen}
+        onClose={() => { setBulkLoadOpen(false); setBulkLoadNodes([]) }}
+        title={`이미지 일괄 로드 (${selectedImages.length}개)`}
+        footer={
+          <>
+            <button
+              onClick={() => { setBulkLoadOpen(false); setBulkLoadNodes([]) }}
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
+            >
+              취소
+            </button>
+            <button
+              onClick={handleBulkLoad}
+              disabled={bulkLoadNodes.length === 0 || bulkLoading}
+              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+            >
+              {bulkLoading ? '로드 중...' : '로드 실행'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">선택한 이미지를 로드할 노드를 선택하세요.</p>
+        <div className="space-y-2 max-h-60 overflow-auto">
+          {nodes.map((n) => (
+            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={bulkLoadNodes.includes(n.id)}
+                onChange={() => toggleBulkLoadNode(n.id)}
+                className="w-4 h-4 rounded border-slate-400 dark:border-slate-600 text-blue-500"
+              />
+              <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
+            </label>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }

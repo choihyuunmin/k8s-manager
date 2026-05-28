@@ -6,6 +6,7 @@ import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
+import BulkActionBar from '../components/BulkActionBar'
 
 interface NodeRecord {
   id: string
@@ -26,6 +27,9 @@ export default function NodesPage() {
   const [form, setForm] = useState({ name: '', host: '', port: 22, username: '', password: '' })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Array<string | number>>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkTesting, setBulkTesting] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -83,6 +87,39 @@ export default function NodesPage() {
     } catch {
       alert('노드 삭제에 실패했습니다.')
     }
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    const ids = [...selected]
+    let failed = 0
+    for (const id of ids) {
+      try { await nodeApi.delete(String(id)) } catch { failed++ }
+    }
+    setSelected([])
+    await fetchData()
+    if (failed > 0) alert(`${failed}개 삭제 실패`)
+  }
+
+  const handleBulkTest = async () => {
+    setBulkTesting(true)
+    const results: { name: string; ok: boolean; msg?: string }[] = []
+    for (const id of selected) {
+      try {
+        const res = await nodeApi.testConnection(String(id))
+        const node = nodes.find((n) => String(n.id) === String(id))
+        results.push({
+          name: node?.name ?? String(id),
+          ok: res.data?.status === 'success',
+          msg: res.data?.message,
+        })
+      } catch {
+        const node = nodes.find((n) => String(n.id) === String(id))
+        results.push({ name: node?.name ?? String(id), ok: false, msg: 'error' })
+      }
+    }
+    setBulkTesting(false)
+    alert(results.map((r) => `${r.ok ? '✓' : '✗'} ${r.name}${r.msg ? ' — ' + r.msg : ''}`).join('\n'))
   }
 
   const handleTest = async (id: string, e: React.MouseEvent) => {
@@ -155,11 +192,34 @@ export default function NodesPage() {
         </button>
       </div>
 
+      <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+        <button
+          onClick={handleBulkTest}
+          disabled={bulkTesting}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <Wifi size={12} /> {bulkTesting ? '테스트 중...' : '연결 테스트'}
+        </button>
+        <button
+          onClick={() => setBulkDeleteOpen(true)}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+        >
+          <Trash2 size={12} /> 삭제
+        </button>
+      </BulkActionBar>
+
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="노드를 불러오는 중..." />
         ) : (
-          <DataTable columns={columns} data={nodes} keyField="id" />
+          <DataTable
+            columns={columns}
+            data={nodes}
+            keyField="id"
+            selectable
+            selectedKeys={selected}
+            onSelectionChange={setSelected}
+          />
         )}
       </div>
 
@@ -246,6 +306,15 @@ export default function NodesPage() {
         onConfirm={handleDelete}
         title="노드 삭제"
         message={`"${deleteTarget?.name}" 노드를 삭제하시겠습니까?`}
+        confirmText="삭제"
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="노드 일괄 삭제"
+        message={`선택한 ${selected.length}개 노드를 삭제하시겠습니까?`}
         confirmText="삭제"
       />
     </div>
