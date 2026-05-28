@@ -4,9 +4,17 @@ from typing import Optional, Tuple
 import paramiko
 
 
+def with_sudo(cmd: str, username: Optional[str]) -> str:
+    """Prefix `sudo -n` when connected as non-root (relies on NOPASSWD sudoers)."""
+    if username and username != "root":
+        return f"sudo -n {cmd}"
+    return cmd
+
+
 class SSHService:
     def __init__(self):
         self._client: Optional[paramiko.SSHClient] = None
+        self._username: Optional[str] = None
 
     def connect(
         self,
@@ -34,6 +42,11 @@ class SSHService:
             connect_kwargs["look_for_keys"] = True
 
         self._client.connect(**connect_kwargs)
+        self._username = username
+
+    @property
+    def username(self) -> Optional[str]:
+        return self._username
 
     def execute_command(self, command: str) -> Tuple[str, str, int]:
         if self._client is None:
@@ -66,11 +79,15 @@ class SSHService:
         try:
             self.upload_file(local_tar_path, remote_path)
 
-            for cmd in [
-                f"docker load -i {remote_path}",
-                f"ctr -n k8s.io images import {remote_path}",
-                f"crictl load {remote_path}",
-            ]:
+            user = self._username
+            attempts = [
+                with_sudo(f"docker load -i {remote_path}", user),
+                with_sudo(f"podman load -i {remote_path}", user),
+                with_sudo(f"ctr -n k8s.io images import {remote_path}", user),
+                with_sudo(f"crictl load {remote_path}", user),
+            ]
+            errors = []
+            for cmd in attempts:
                 stdout, stderr, exit_code = self.execute_command(cmd)
                 if exit_code == 0:
                     self.execute_command(f"rm -f {remote_path}")
@@ -80,10 +97,11 @@ class SSHService:
                         "output": stdout.strip(),
                         "node": node_info["host"],
                     }
+                errors.append(f"{cmd.split()[0] if not cmd.startswith('sudo') else cmd.split()[2]}: {(stderr or '').strip() or f'exit {exit_code}'}")
 
             return {
                 "status": "failed",
-                "message": "No container runtime found (tried docker, containerd, crictl)",
+                "message": "No container runtime accessible. " + " | ".join(errors),
                 "node": node_info["host"],
             }
         finally:

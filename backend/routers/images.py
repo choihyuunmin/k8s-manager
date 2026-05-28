@@ -11,7 +11,7 @@ from auth.auth import get_current_user
 from config import settings
 from database import get_db
 from services.k8s_client import k8s_client
-from services.ssh_service import SSHService
+from services.ssh_service import SSHService, with_sudo
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
@@ -194,10 +194,11 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
             key_path=node.get("ssh_key_path"),
             password=node.get("password"),
         )
+        user = ssh.username
 
         # Try docker
         stdout, stderr, exit_code = ssh.execute_command(
-            "docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'"
+            with_sudo("docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'", user)
         )
         if exit_code == 0:
             runtime_available = True
@@ -218,8 +219,31 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
         else:
             errors.append(f"docker: {(stderr or '').strip() or f'exit {exit_code}'}")
 
+        # Try podman
+        stdout, stderr, exit_code = ssh.execute_command(
+            with_sudo("podman images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'", user)
+        )
+        if exit_code == 0:
+            runtime_available = True
+            if stdout.strip():
+                images = []
+                for line in stdout.strip().splitlines():
+                    parts = line.split(None, 2)
+                    if len(parts) >= 3:
+                        repo_tag = parts[0].split(":", 1)
+                        images.append({
+                            "repository": repo_tag[0],
+                            "tag": repo_tag[1] if len(repo_tag) > 1 else "<none>",
+                            "id": parts[1],
+                            "size": parts[2],
+                        })
+                if images:
+                    return images
+        else:
+            errors.append(f"podman: {(stderr or '').strip() or f'exit {exit_code}'}")
+
         # Try crictl
-        stdout, stderr, exit_code = ssh.execute_command("crictl images -o json")
+        stdout, stderr, exit_code = ssh.execute_command(with_sudo("crictl images -o json", user))
         if exit_code == 0:
             runtime_available = True
             if stdout.strip():
@@ -244,7 +268,7 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
             errors.append(f"crictl: {(stderr or '').strip() or f'exit {exit_code}'}")
 
         # Try ctr
-        stdout, stderr, exit_code = ssh.execute_command("ctr -n k8s.io images list")
+        stdout, stderr, exit_code = ssh.execute_command(with_sudo("ctr -n k8s.io images list", user))
         if exit_code == 0:
             runtime_available = True
             lines = stdout.strip().splitlines()
