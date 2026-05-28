@@ -80,28 +80,34 @@ class SSHService:
             self.upload_file(local_tar_path, remote_path)
 
             user = self._username
+            # NOTE: `crictl` has no `load` subcommand. The runtimes that can import a tar archive are:
+            # - podman (default storage shared with CRI-O on most RHEL/CentOS/Rocky distros)
+            # - ctr  (containerd runtime, requires -n k8s.io to populate kubelet's namespace)
+            # - docker (legacy)
             attempts = [
-                with_sudo(f"docker load -i {remote_path}", user),
-                with_sudo(f"podman load -i {remote_path}", user),
-                with_sudo(f"ctr -n k8s.io images import {remote_path}", user),
-                with_sudo(f"crictl load {remote_path}", user),
+                ("podman", with_sudo(f"podman load -i {remote_path}", user)),
+                ("ctr",    with_sudo(f"ctr -n k8s.io images import {remote_path}", user)),
+                ("docker", with_sudo(f"docker load -i {remote_path}", user)),
             ]
             errors = []
-            for cmd in attempts:
+            for name, cmd in attempts:
                 stdout, stderr, exit_code = self.execute_command(cmd)
                 if exit_code == 0:
                     self.execute_command(f"rm -f {remote_path}")
                     return {
                         "status": "success",
+                        "runtime": name,
                         "command": cmd,
                         "output": stdout.strip(),
                         "node": node_info["host"],
                     }
-                errors.append(f"{cmd.split()[0] if not cmd.startswith('sudo') else cmd.split()[2]}: {(stderr or '').strip() or f'exit {exit_code}'}")
+                errors.append(f"{name}: {(stderr or '').strip() or stdout.strip() or f'exit {exit_code}'}")
 
+            # Clean up the uploaded tar even on failure
+            self.execute_command(f"rm -f {remote_path}")
             return {
                 "status": "failed",
-                "message": "No container runtime accessible. " + " | ".join(errors),
+                "message": "Image load failed. " + " | ".join(errors),
                 "node": node_info["host"],
             }
         finally:

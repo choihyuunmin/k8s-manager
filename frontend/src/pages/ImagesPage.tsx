@@ -144,12 +144,25 @@ export default function ImagesPage() {
     if (!loadModal || selectedNodes.length === 0) return
     setLoadingAction(true)
     try {
-      await imageApi.load(loadModal.id, selectedNodes)
+      const res = await imageApi.load(loadModal.id, selectedNodes)
+      const results: { status: string; node: string; message?: string; runtime?: string; output?: string }[] = res.data?.results ?? []
+      const failed = results.filter((r) => r.status !== 'success')
+      const succeeded = results.filter((r) => r.status === 'success')
+      if (failed.length === 0) {
+        alert(`✓ ${succeeded.length}개 노드 로드 성공 (${succeeded.map((r) => `${r.node}/${r.runtime}`).join(', ')})`)
+      } else {
+        const lines = [
+          succeeded.length > 0 ? `✓ 성공: ${succeeded.map((r) => `${r.node} (${r.runtime})`).join(', ')}` : null,
+          ...failed.map((r) => `✗ ${r.node}\n  ${r.message ?? '실패'}`),
+        ].filter(Boolean)
+        alert(lines.join('\n\n'))
+      }
       setLoadModal(null)
       setSelectedNodes([])
       await fetchData()
-    } catch {
-      alert('이미지 로드에 실패했습니다.')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '이미지 로드에 실패했습니다.')
     } finally {
       setLoadingAction(false)
     }
