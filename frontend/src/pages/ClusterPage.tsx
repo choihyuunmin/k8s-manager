@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Download, RefreshCw } from 'lucide-react'
+import { Download, RefreshCw, Trash2, AlertCircle, Search } from 'lucide-react'
 import { clusterApi, manifestApi } from '../api/client'
 import FilterBar from '../components/FilterBar'
 import DataTable, { type Column } from '../components/DataTable'
@@ -10,6 +10,19 @@ import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
 import BulkActionBar from '../components/BulkActionBar'
 import { useNamespaceParam } from '../hooks/useNamespace'
+
+interface PodDescribe {
+  name: string
+  namespace: string
+  phase: string
+  reason: string
+  message: string
+  node: string
+  conditions: { type: string; status: string; reason: string; message: string; last_transition_time: string }[]
+  containers: { name: string; ready: boolean; restart_count: number; image: string; state: { state: string; reason?: string; message?: string; exit_code?: number } }[]
+  init_containers: { name: string; ready: boolean; state: { state: string; reason?: string; message?: string } }[]
+  events: { type: string; reason: string; message: string; count: number; last_timestamp: string; source: string }[]
+}
 
 type Tab = 'nodes' | 'pods' | 'deployments' | 'services' | 'events'
 
@@ -34,6 +47,11 @@ export default function ClusterPage() {
   const [selected, setSelected] = useState<Array<string | number>>([])
   const [bulkRestartOpen, setBulkRestartOpen] = useState(false)
   const [bulkRestarting, setBulkRestarting] = useState(false)
+  const [deletingPod, setDeletingPod] = useState<string | null>(null)
+  const [podDeleteTarget, setPodDeleteTarget] = useState<Record<string, unknown> | null>(null)
+  const [bulkPodDeleteOpen, setBulkPodDeleteOpen] = useState(false)
+  const [describeTarget, setDescribeTarget] = useState<PodDescribe | null>(null)
+  const [describing, setDescribing] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -105,6 +123,62 @@ export default function ClusterPage() {
     }
   }
 
+  const handleDeletePod = async () => {
+    if (!podDeleteTarget) return
+    const name = String(podDeleteTarget.name)
+    const ns = String(podDeleteTarget.namespace || 'default')
+    setDeletingPod(`${ns}/${name}`)
+    try {
+      await clusterApi.deletePod(ns, name)
+      setPodDeleteTarget(null)
+      await fetchData()
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '파드 삭제에 실패했습니다.')
+    } finally {
+      setDeletingPod(null)
+    }
+  }
+
+  const handleBulkDeletePods = async () => {
+    setBulkPodDeleteOpen(false)
+    const items = selected.map((k) => {
+      const [namespace, name] = String(k).split('/')
+      return { namespace, name }
+    })
+    try {
+      const res = await clusterApi.bulkDeletePods(items)
+      const results: { status: string; namespace: string; name: string; message?: string }[] = res.data?.results ?? []
+      const failed = results.filter((r) => r.status !== 'success')
+      if (failed.length === 0) {
+        alert(`✓ ${results.length}개 Pod 삭제됨`)
+      } else {
+        const lines = failed.map((r) => `✗ ${r.namespace}/${r.name}: ${r.message ?? ''}`)
+        alert(`성공 ${results.length - failed.length}, 실패 ${failed.length}\n\n${lines.join('\n')}`)
+      }
+      setSelected([])
+      await fetchData()
+    } catch {
+      alert('일괄 삭제에 실패했습니다.')
+    }
+  }
+
+  const handleDescribe = async (row: Record<string, unknown>) => {
+    const name = String(row.name)
+    const ns = String(row.namespace || 'default')
+    const key = `${ns}/${name}`
+    setDescribing(key)
+    try {
+      const res = await clusterApi.describePod(ns, name)
+      setDescribeTarget(res.data)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '파드 정보 조회에 실패했습니다.')
+    } finally {
+      setDescribing(null)
+    }
+  }
+
   const handleBulkRestart = async () => {
     setBulkRestartOpen(false)
     setBulkRestarting(true)
@@ -140,6 +214,28 @@ export default function ClusterPage() {
     </button>
   )
 
+  const podActions = (r: Record<string, unknown>) => {
+    const key = `${r.namespace}/${r.name}`
+    return (
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => handleDescribe(r)}
+          disabled={describing === key}
+          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <Search size={12} /> {describing === key ? '...' : '원인 보기'}
+        </button>
+        <button
+          onClick={() => setPodDeleteTarget(r)}
+          disabled={deletingPod === key}
+          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <Trash2 size={12} /> 삭제
+        </button>
+      </div>
+    )
+  }
+
   const deploymentActions = (r: Record<string, unknown>) => {
     const key = `${r.namespace}/${r.name}`
     return (
@@ -172,7 +268,7 @@ export default function ClusterPage() {
       { key: 'status', header: '상태', sortable: true, render: (r) => <StatusBadge status={String(r.status ?? 'Unknown')} /> },
       { key: 'restarts', header: '재시작', sortable: true },
       { key: 'node', header: '노드' },
-      { key: 'actions', header: '액션', render: importButton },
+      { key: 'actions', header: '액션', render: podActions },
     ],
     deployments: [
       { key: 'name', header: '이름', sortable: true },
@@ -200,6 +296,8 @@ export default function ClusterPage() {
   }
 
   const isDeploymentTab = tab === 'deployments'
+  const isPodTab = tab === 'pods'
+  const isSelectableTab = isDeploymentTab || isPodTab
 
   return (
     <div className="space-y-6">
@@ -235,6 +333,17 @@ export default function ClusterPage() {
         </BulkActionBar>
       )}
 
+      {isPodTab && (
+        <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+          <button
+            onClick={() => setBulkPodDeleteOpen(true)}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+          >
+            <Trash2 size={12} /> 일괄 삭제
+          </button>
+        </BulkActionBar>
+      )}
+
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="데이터를 불러오는 중..." />
@@ -244,9 +353,9 @@ export default function ClusterPage() {
             data={filtered}
             keyField="_key"
             onRowClick={(row) => setDetail(row)}
-            selectable={isDeploymentTab}
-            selectedKeys={isDeploymentTab ? selected : undefined}
-            onSelectionChange={isDeploymentTab ? setSelected : undefined}
+            selectable={isSelectableTab}
+            selectedKeys={isSelectableTab ? selected : undefined}
+            onSelectionChange={isSelectableTab ? setSelected : undefined}
           />
         )}
       </div>
@@ -272,6 +381,160 @@ export default function ClusterPage() {
         message={`선택한 ${selected.length}개 Deployment를 재배포(rollout restart)하시겠습니까?`}
         confirmText="재배포"
       />
+
+      <ConfirmDialog
+        open={!!podDeleteTarget}
+        onClose={() => setPodDeleteTarget(null)}
+        onConfirm={handleDeletePod}
+        title="파드 삭제"
+        message={`"${podDeleteTarget?.namespace}/${podDeleteTarget?.name}" 파드를 삭제하시겠습니까? 컨트롤러가 있으면 자동으로 재생성됩니다.`}
+        confirmText="삭제"
+      />
+
+      <ConfirmDialog
+        open={bulkPodDeleteOpen}
+        onClose={() => setBulkPodDeleteOpen(false)}
+        onConfirm={handleBulkDeletePods}
+        title="파드 일괄 삭제"
+        message={`선택한 ${selected.length}개 Pod를 삭제하시겠습니까?`}
+        confirmText="삭제"
+      />
+
+      {/* Pod describe modal: shows phase/reason, container states, conditions, events */}
+      <Modal
+        open={!!describeTarget}
+        onClose={() => setDescribeTarget(null)}
+        title={describeTarget ? `파드 진단 — ${describeTarget.namespace}/${describeTarget.name}` : ''}
+        width="max-w-3xl"
+      >
+        {describeTarget && (
+          <div className="space-y-4 text-sm">
+            <div className="flex flex-wrap gap-3">
+              <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 rounded-lg">
+                <span className="text-xs text-slate-500">Phase</span>
+                <p className="font-medium text-slate-800 dark:text-slate-200">{describeTarget.phase}</p>
+              </div>
+              {describeTarget.reason && (
+                <div className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <span className="text-xs text-amber-700 dark:text-amber-300">Reason</span>
+                  <p className="font-medium text-amber-700 dark:text-amber-300">{describeTarget.reason}</p>
+                </div>
+              )}
+              {describeTarget.node && (
+                <div className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 rounded-lg">
+                  <span className="text-xs text-slate-500">노드</span>
+                  <p className="font-medium text-slate-800 dark:text-slate-200">{describeTarget.node}</p>
+                </div>
+              )}
+            </div>
+
+            {describeTarget.message && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-700 dark:text-red-300 text-xs font-mono break-words">
+                {describeTarget.message}
+              </div>
+            )}
+
+            {(describeTarget.containers.length > 0 || describeTarget.init_containers.length > 0) && (
+              <section>
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">컨테이너 상태</h3>
+                <div className="space-y-2">
+                  {describeTarget.init_containers.map((c) => (
+                    <ContainerStatusRow key={'i-' + c.name} container={c} init />
+                  ))}
+                  {describeTarget.containers.map((c) => (
+                    <ContainerStatusRow key={c.name} container={c} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {describeTarget.conditions.length > 0 && (
+              <section>
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Conditions</h3>
+                <div className="space-y-1.5">
+                  {describeTarget.conditions.map((c, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                        c.status === 'True'
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                      }`}>
+                        {c.type}
+                      </span>
+                      <div className="min-w-0">
+                        {c.reason && <p className="text-slate-700 dark:text-slate-300">{c.reason}</p>}
+                        {c.message && <p className="text-slate-600 dark:text-slate-400">{c.message}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                <AlertCircle size={14} className="text-amber-600 dark:text-amber-400" />
+                관련 이벤트 ({describeTarget.events.length})
+              </h3>
+              {describeTarget.events.length === 0 ? (
+                <p className="text-xs text-slate-500">이벤트 없음</p>
+              ) : (
+                <div className="space-y-1.5 max-h-72 overflow-auto">
+                  {describeTarget.events.map((e, i) => (
+                    <div key={i} className="flex items-start gap-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 mt-0.5 ${
+                        e.type === 'Warning'
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                      }`}>
+                        {e.type}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-slate-800 dark:text-slate-200">
+                          <span className="font-mono text-blue-600 dark:text-blue-400">{e.reason}</span>
+                          {e.count > 1 && <span className="text-slate-500"> ×{e.count}</span>}
+                          <span className="text-slate-500"> · {e.last_timestamp}</span>
+                        </p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5 break-words">{e.message}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+function ContainerStatusRow({ container, init }: { container: PodDescribe['containers'][number] | PodDescribe['init_containers'][number]; init?: boolean }) {
+  const s = container.state
+  const stateColor =
+    s.state === 'running' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+    : s.state === 'waiting' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+    : s.state === 'terminated' ? 'bg-red-500/15 text-red-700 dark:text-red-400'
+    : 'bg-slate-500/15 text-slate-700 dark:text-slate-400'
+  return (
+    <div className="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
+          {init && <span className="text-slate-500 mr-1">[init]</span>}
+          {container.name}
+        </span>
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${stateColor}`}>{s.state}</span>
+      </div>
+      {(s.reason || s.message) && (
+        <p className="text-xs text-slate-700 dark:text-slate-300">
+          {s.reason && <span className="font-mono">{s.reason}</span>}
+          {s.reason && s.message && <span> · </span>}
+          {s.message}
+        </p>
+      )}
+      {'restart_count' in container && container.restart_count > 0 && (
+        <p className="text-xs text-slate-500 mt-0.5">재시작: {container.restart_count}회</p>
+      )}
     </div>
   )
 }

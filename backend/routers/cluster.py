@@ -112,6 +112,59 @@ async def list_events(
         raise HTTPException(status_code=503, detail=str(e))
 
 
+class PodRef(BaseModel):
+    namespace: str
+    name: str
+
+
+class BulkPodDeleteRequest(BaseModel):
+    items: list[PodRef]
+
+
+@router.delete("/pods/{namespace}/{name}")
+async def delete_pod(
+    namespace: str,
+    name: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return k8s_client.delete_resource("pod", name, namespace)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/pods/delete/bulk")
+async def bulk_delete_pods(
+    req: BulkPodDeleteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    results = []
+    for item in req.items:
+        try:
+            res = k8s_client.delete_resource("pod", item.name, item.namespace)
+            results.append({"status": "success", **res, "namespace": item.namespace, "name": item.name})
+        except Exception as e:
+            results.append({
+                "status": "failed",
+                "namespace": item.namespace,
+                "name": item.name,
+                "message": str(e),
+            })
+    return {"results": results}
+
+
+@router.get("/pods/{namespace}/{name}/describe")
+async def describe_pod(
+    namespace: str,
+    name: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return k8s_client.describe_pod(namespace, name)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 class RolloutRestartRequest(BaseModel):
     kind: str
     namespace: str

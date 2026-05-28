@@ -231,6 +231,94 @@ class K8sClient:
 
         return {"status": "updated", "message": "Manifest updated successfully"}
 
+    def describe_pod(self, namespace: str, name: str) -> dict:
+        """Return pod status, container statuses, conditions, and related events.
+        Particularly useful for diagnosing Pending pods (FailedScheduling, ImagePullBackOff, etc.)."""
+        pod = self.core_v1.read_namespaced_pod(name, namespace)
+
+        conditions = []
+        for c in (pod.status.conditions or []):
+            conditions.append({
+                "type": c.type,
+                "status": c.status,
+                "reason": c.reason or "",
+                "message": c.message or "",
+                "last_transition_time": c.last_transition_time.isoformat() if c.last_transition_time else "",
+            })
+
+        def container_state_info(state) -> dict:
+            if state is None:
+                return {"state": "unknown"}
+            if state.running:
+                return {"state": "running", "started_at": state.running.started_at.isoformat() if state.running.started_at else ""}
+            if state.waiting:
+                return {"state": "waiting", "reason": state.waiting.reason or "", "message": state.waiting.message or ""}
+            if state.terminated:
+                return {
+                    "state": "terminated",
+                    "reason": state.terminated.reason or "",
+                    "message": state.terminated.message or "",
+                    "exit_code": state.terminated.exit_code,
+                }
+            return {"state": "unknown"}
+
+        containers = []
+        for cs in (pod.status.container_statuses or []):
+            containers.append({
+                "name": cs.name,
+                "ready": cs.ready,
+                "restart_count": cs.restart_count,
+                "image": cs.image,
+                "state": container_state_info(cs.state),
+                "last_state": container_state_info(cs.last_state) if cs.last_state else None,
+            })
+
+        init_containers = []
+        for cs in (pod.status.init_container_statuses or []):
+            init_containers.append({
+                "name": cs.name,
+                "ready": cs.ready,
+                "restart_count": cs.restart_count,
+                "image": cs.image,
+                "state": container_state_info(cs.state),
+            })
+
+        # Events filtered to this pod
+        events_resp = self.core_v1.list_namespaced_event(
+            namespace=namespace,
+            field_selector=f"involvedObject.name={name}",
+            limit=50,
+        )
+        events = []
+        for e in events_resp.items:
+            events.append({
+                "type": e.type,
+                "reason": e.reason,
+                "message": e.message,
+                "count": e.count,
+                "first_timestamp": e.first_timestamp.isoformat() if e.first_timestamp else "",
+                "last_timestamp": e.last_timestamp.isoformat() if e.last_timestamp else "",
+                "source": (e.source.component if e.source else "") or "",
+            })
+        # Sort by last_timestamp desc
+        events.sort(key=lambda x: x["last_timestamp"], reverse=True)
+
+        return {
+            "name": pod.metadata.name,
+            "namespace": pod.metadata.namespace,
+            "phase": pod.status.phase,
+            "reason": pod.status.reason or "",
+            "message": pod.status.message or "",
+            "node": pod.spec.node_name or "",
+            "host_ip": pod.status.host_ip or "",
+            "pod_ip": pod.status.pod_ip or "",
+            "start_time": pod.status.start_time.isoformat() if pod.status.start_time else "",
+            "conditions": conditions,
+            "containers": containers,
+            "init_containers": init_containers,
+            "events": events,
+        }
+
     def delete_resource(self, kind: str, name: str, namespace: str = "default") -> dict:
         kind_lower = kind.lower()
         if kind_lower == "deployment":

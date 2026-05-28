@@ -45,6 +45,12 @@ export const clusterApi = {
     client.post('/api/cluster/rollout-restart', { kind, namespace, name }),
   bulkRolloutRestart: (items: { kind: string; namespace: string; name: string }[]) =>
     client.post('/api/cluster/rollout-restart/bulk', { items }),
+  deletePod: (namespace: string, name: string) =>
+    client.delete(`/api/cluster/pods/${namespace}/${name}`),
+  bulkDeletePods: (items: { namespace: string; name: string }[]) =>
+    client.post('/api/cluster/pods/delete/bulk', { items }),
+  describePod: (namespace: string, name: string) =>
+    client.get(`/api/cluster/pods/${namespace}/${name}/describe`),
 }
 
 export const dashboardApi = {
