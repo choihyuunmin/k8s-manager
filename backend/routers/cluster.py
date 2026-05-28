@@ -70,16 +70,31 @@ async def list_namespaces(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/summary")
-async def cluster_summary(current_user: dict = Depends(get_current_user)):
+async def cluster_summary(
+    namespace: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+):
     try:
-        overview = k8s_client.get_cluster_overview()
-        services = k8s_client.list_services()
-        return {
-            "nodes": overview["nodes"]["total"],
-            "pods": overview["pods"]["total"],
-            "deployments": overview["deployments"],
-            "services": len(services),
-        }
+        if namespace:
+            pods = k8s_client.list_pods(namespace)
+            deployments = k8s_client.list_deployments(namespace)
+            services = k8s_client.list_services(namespace)
+            nodes = k8s_client.list_nodes()
+            return {
+                "nodes": len(nodes),
+                "pods": len(pods),
+                "deployments": len(deployments),
+                "services": len(services),
+            }
+        else:
+            overview = k8s_client.get_cluster_overview()
+            services = k8s_client.list_services()
+            return {
+                "nodes": overview["nodes"]["total"],
+                "pods": overview["pods"]["total"],
+                "deployments": overview["deployments"],
+                "services": len(services),
+            }
     except Exception:
         return {"nodes": 0, "pods": 0, "deployments": 0, "services": 0}
 

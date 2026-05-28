@@ -41,12 +41,12 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const sumRes = await clusterApi.getSummary()
+      const sumRes = await clusterApi.getSummary(nsParam)
       setSummary(sumRes.data)
     } catch {
       // backend not available
     }
-  }, [])
+  }, [nsParam])
 
   const fetchResources = useCallback(async () => {
     setLoading(true)

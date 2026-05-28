@@ -38,7 +38,7 @@ export const clusterApi = {
   getServices: (namespace?: string) => client.get('/api/cluster/services', { params: { namespace } }),
   getEvents: (namespace?: string) => client.get('/api/cluster/events', { params: { namespace } }),
   getNamespaces: () => client.get<{ name: string; status: string }[]>('/api/cluster/namespaces'),
-  getSummary: () => client.get('/api/cluster/summary'),
+  getSummary: (namespace?: string) => client.get('/api/cluster/summary', { params: { namespace } }),
   getResourceYaml: (kind: string, name: string, namespace: string) =>
     client.get<{ yaml: string; kind: string; name: string; namespace: string }>('/api/cluster/resource/yaml', { params: { kind, name, namespace } }),
 }
