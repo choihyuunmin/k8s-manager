@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Download } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 import { clusterApi, manifestApi } from '../api/client'
 import FilterBar from '../components/FilterBar'
 import DataTable, { type Column } from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
+import ConfirmDialog from '../components/ConfirmDialog'
+import BulkActionBar from '../components/BulkActionBar'
 import { useNamespaceParam } from '../hooks/useNamespace'
 
 type Tab = 'nodes' | 'pods' | 'deployments' | 'services' | 'events'
@@ -28,9 +30,14 @@ export default function ClusterPage() {
   const [search, setSearch] = useState('')
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
   const [importing, setImporting] = useState<string | null>(null)
+  const [restartingKey, setRestartingKey] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Array<string | number>>([])
+  const [bulkRestartOpen, setBulkRestartOpen] = useState(false)
+  const [bulkRestarting, setBulkRestarting] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
+    setSelected([])
     try {
       let res
       switch (tab) {
@@ -50,7 +57,13 @@ export default function ClusterPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const filtered = data.filter((r) => {
+  // Synthetic unique key for each row (namespace/name where applicable, else name)
+  const withKeys = useMemo(() => data.map((r) => ({
+    ...r,
+    _key: r.namespace ? `${r.namespace}/${r.name}` : String(r.name),
+  })), [data])
+
+  const filtered = withKeys.filter((r) => {
     if (!search) return true
     return JSON.stringify(r).toLowerCase().includes(search.toLowerCase())
   })
@@ -76,6 +89,47 @@ export default function ClusterPage() {
     }
   }
 
+  const handleRestart = async (row: Record<string, unknown>) => {
+    const name = String(row.name)
+    const ns = String(row.namespace || 'default')
+    const key = `${ns}/${name}`
+    setRestartingKey(key)
+    try {
+      await clusterApi.rolloutRestart('Deployment', ns, name)
+      alert(`✓ ${ns}/${name} 재배포 시작됨`)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '재배포에 실패했습니다.')
+    } finally {
+      setRestartingKey(null)
+    }
+  }
+
+  const handleBulkRestart = async () => {
+    setBulkRestartOpen(false)
+    setBulkRestarting(true)
+    const items = selected.map((k) => {
+      const [namespace, name] = String(k).split('/')
+      return { kind: 'Deployment', namespace, name }
+    })
+    try {
+      const res = await clusterApi.bulkRolloutRestart(items)
+      const results: { status: string; namespace: string; name: string; message?: string }[] = res.data?.results ?? []
+      const failed = results.filter((r) => r.status !== 'success')
+      if (failed.length === 0) {
+        alert(`✓ ${results.length}개 Deployment 재배포 시작됨`)
+      } else {
+        const lines = failed.map((r) => `✗ ${r.namespace}/${r.name}: ${r.message ?? ''}`)
+        alert(`성공 ${results.length - failed.length}, 실패 ${failed.length}\n\n${lines.join('\n')}`)
+      }
+      setSelected([])
+    } catch {
+      alert('일괄 재배포에 실패했습니다.')
+    } finally {
+      setBulkRestarting(false)
+    }
+  }
+
   const importButton = (r: Record<string, unknown>) => (
     <button
       onClick={(e) => { e.stopPropagation(); handleImport(r) }}
@@ -85,6 +139,23 @@ export default function ClusterPage() {
       <Download size={12} /> {importing === String(r.name) ? '가져오는 중...' : '가져오기'}
     </button>
   )
+
+  const deploymentActions = (r: Record<string, unknown>) => {
+    const key = `${r.namespace}/${r.name}`
+    return (
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => handleRestart(r)}
+          disabled={restartingKey === key}
+          className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <RefreshCw size={12} className={restartingKey === key ? 'animate-spin' : ''} />
+          {restartingKey === key ? '재배포 중...' : '재배포'}
+        </button>
+        {importButton(r)}
+      </div>
+    )
+  }
 
   const columnsByTab: Record<Tab, Column<Record<string, unknown>>[]> = {
     nodes: [
@@ -109,7 +180,7 @@ export default function ClusterPage() {
       { key: 'ready_replicas', header: '준비됨' },
       { key: 'replicas', header: '레플리카' },
       { key: 'available_replicas', header: '상태', render: (r) => <StatusBadge status={Number(r.available_replicas) > 0 ? 'Running' : 'Pending'} /> },
-      { key: 'actions', header: '액션', render: importButton },
+      { key: 'actions', header: '액션', render: deploymentActions },
     ],
     services: [
       { key: 'name', header: '이름', sortable: true },
@@ -127,6 +198,8 @@ export default function ClusterPage() {
       { key: 'last_timestamp', header: '시간', sortable: true },
     ],
   }
+
+  const isDeploymentTab = tab === 'deployments'
 
   return (
     <div className="space-y-6">
@@ -150,6 +223,18 @@ export default function ClusterPage() {
 
       <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="리소스 검색..." />
 
+      {isDeploymentTab && (
+        <BulkActionBar count={selected.length} onClear={() => setSelected([])}>
+          <button
+            onClick={() => setBulkRestartOpen(true)}
+            disabled={bulkRestarting}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded transition-colors"
+          >
+            <RefreshCw size={12} className={bulkRestarting ? 'animate-spin' : ''} /> 일괄 재배포
+          </button>
+        </BulkActionBar>
+      )}
+
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
         {loading ? (
           <LoadingSpinner text="데이터를 불러오는 중..." />
@@ -157,8 +242,11 @@ export default function ClusterPage() {
           <DataTable
             columns={columnsByTab[tab]}
             data={filtered}
-            keyField="name"
+            keyField="_key"
             onRowClick={(row) => setDetail(row)}
+            selectable={isDeploymentTab}
+            selectedKeys={isDeploymentTab ? selected : undefined}
+            onSelectionChange={isDeploymentTab ? setSelected : undefined}
           />
         )}
       </div>
@@ -175,6 +263,15 @@ export default function ClusterPage() {
           </pre>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={bulkRestartOpen}
+        onClose={() => setBulkRestartOpen(false)}
+        onConfirm={handleBulkRestart}
+        title="Deployment 일괄 재배포"
+        message={`선택한 ${selected.length}개 Deployment를 재배포(rollout restart)하시겠습니까?`}
+        confirmText="재배포"
+      />
     </div>
   )
 }

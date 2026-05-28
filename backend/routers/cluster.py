@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from auth.auth import get_current_user
 from services.k8s_client import k8s_client
@@ -109,6 +110,50 @@ async def list_events(
         return k8s_client.list_events(namespace, limit)
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+class RolloutRestartRequest(BaseModel):
+    kind: str
+    namespace: str
+    name: str
+
+
+class BulkRolloutRestartRequest(BaseModel):
+    items: list[RolloutRestartRequest]
+
+
+@router.post("/rollout-restart")
+async def rollout_restart(
+    req: RolloutRestartRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return k8s_client.rollout_restart(req.name, req.namespace, req.kind)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/rollout-restart/bulk")
+async def bulk_rollout_restart(
+    req: BulkRolloutRestartRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    results = []
+    for item in req.items:
+        try:
+            res = k8s_client.rollout_restart(item.name, item.namespace, item.kind)
+            results.append({"status": "success", **res, "kind": item.kind, "namespace": item.namespace, "name": item.name})
+        except Exception as e:
+            results.append({
+                "status": "failed",
+                "kind": item.kind,
+                "namespace": item.namespace,
+                "name": item.name,
+                "message": str(e),
+            })
+    return {"results": results}
 
 
 @router.get("/resource/yaml")

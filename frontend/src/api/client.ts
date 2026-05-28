@@ -41,6 +41,10 @@ export const clusterApi = {
   getSummary: (namespace?: string) => client.get('/api/cluster/summary', { params: { namespace } }),
   getResourceYaml: (kind: string, name: string, namespace: string) =>
     client.get<{ yaml: string; kind: string; name: string; namespace: string }>('/api/cluster/resource/yaml', { params: { kind, name, namespace } }),
+  rolloutRestart: (kind: string, namespace: string, name: string) =>
+    client.post('/api/cluster/rollout-restart', { kind, namespace, name }),
+  bulkRolloutRestart: (items: { kind: string; namespace: string; name: string }[]) =>
+    client.post('/api/cluster/rollout-restart/bulk', { items }),
 }
 
 export const dashboardApi = {

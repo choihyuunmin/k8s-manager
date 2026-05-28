@@ -376,6 +376,11 @@ class K8sClient:
         return result
 
     def rollout_restart_deployment(self, name: str, namespace: str) -> dict:
+        return self.rollout_restart(name, namespace, "deployment")
+
+    def rollout_restart(self, name: str, namespace: str, kind: str) -> dict:
+        """Trigger a rollout restart for Deployment/StatefulSet/DaemonSet by patching
+        the pod template with a new 'restartedAt' annotation (same as kubectl rollout restart)."""
         body = {
             "spec": {
                 "template": {
@@ -387,8 +392,16 @@ class K8sClient:
                 }
             }
         }
-        self.apps_v1.patch_namespaced_deployment(name, namespace, body)
-        return {"status": "restarted", "message": f"Deployment {namespace}/{name} rollout restart triggered"}
+        kind_lower = kind.lower()
+        if kind_lower == "deployment":
+            self.apps_v1.patch_namespaced_deployment(name, namespace, body)
+        elif kind_lower == "statefulset":
+            self.apps_v1.patch_namespaced_stateful_set(name, namespace, body)
+        elif kind_lower == "daemonset":
+            self.apps_v1.patch_namespaced_daemon_set(name, namespace, body)
+        else:
+            raise ValueError(f"Rollout restart not supported for kind: {kind}")
+        return {"status": "restarted", "message": f"{kind}/{namespace}/{name} rollout restart triggered"}
 
     def list_statefulsets(self, namespace: Optional[str] = None) -> list[dict]:
         if namespace:
