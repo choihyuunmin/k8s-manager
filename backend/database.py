@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 CREATE TABLE IF NOT EXISTS image_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     filename TEXT NOT NULL,
+    application TEXT,
     image_name TEXT,
     image_tag TEXT,
     target_nodes TEXT,
@@ -107,6 +108,11 @@ async def init_db():
     db = await get_db()
     try:
         await db.executescript(TABLES_SQL)
+
+        cursor = await db.execute("PRAGMA table_info(image_history)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "application" not in columns:
+            await db.execute("ALTER TABLE image_history ADD COLUMN application TEXT")
 
         cursor = await db.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         row = await cursor.fetchone()

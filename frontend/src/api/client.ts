@@ -44,9 +44,10 @@ export const clusterApi = {
 }
 
 export const imageApi = {
-  upload: (file: File, onProgress?: (pct: number) => void) => {
+  upload: (file: File, onProgress?: (pct: number) => void, application?: string) => {
     const form = new FormData()
     form.append('file', file)
+    if (application) form.append('application', application)
     return client.post('/api/images/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e) => {
@@ -60,6 +61,7 @@ export const imageApi = {
   getNodeImages: (nodeId: number) => client.get('/api/images/node/' + nodeId + '/list'),
   replace: (data: { image_id: number; node_ids: number[]; target_image: string; restart_deployments: boolean }) =>
     client.post('/api/images/replace', data),
+  getApplications: () => client.get<string[]>('/api/images/applications'),
 }
 
 export const manifestApi = {

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from auth.auth import get_current_user
@@ -30,6 +30,7 @@ class ReplaceRequest(BaseModel):
 @router.post("/upload")
 async def upload_image(
     file: UploadFile = File(...),
+    application: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user),
 ):
     upload_dir = Path(settings.UPLOAD_DIR)
@@ -40,17 +41,25 @@ async def upload_image(
     with open(file_path, "wb") as f:
         f.write(content)
 
+    app_value = (application or "").strip() or None
+
     db = await get_db()
     try:
         now = datetime.now(timezone.utc).isoformat()
         await db.execute(
-            "INSERT INTO image_history (filename, status, loaded_by, created_at) VALUES (?, ?, ?, ?)",
-            (file.filename, "uploaded", current_user["username"], now),
+            "INSERT INTO image_history (filename, application, status, loaded_by, created_at) VALUES (?, ?, ?, ?, ?)",
+            (file.filename, app_value, "uploaded", current_user["username"], now),
         )
         await db.commit()
         cursor = await db.execute("SELECT last_insert_rowid()")
         row = await cursor.fetchone()
-        return {"id": row[0], "filename": file.filename, "status": "uploaded", "size": len(content)}
+        return {
+            "id": row[0],
+            "filename": file.filename,
+            "application": app_value,
+            "status": "uploaded",
+            "size": len(content),
+        }
     finally:
         await db.close()
 
@@ -107,13 +116,26 @@ async def load_image_by_id(
 
         await db.execute(
             """INSERT INTO image_history
-               (filename, image_name, image_tag, target_nodes, status, loaded_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (image["filename"], image.get("image_name"), image.get("image_tag"),
+               (filename, application, image_name, image_tag, target_nodes, status, loaded_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (image["filename"], image.get("application"), image.get("image_name"), image.get("image_tag"),
              target_nodes, overall_status, current_user["username"], now),
         )
         await db.commit()
         return {"status": overall_status, "results": results}
+    finally:
+        await db.close()
+
+
+@router.get("/applications")
+async def list_applications(current_user: dict = Depends(get_current_user)):
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT DISTINCT application FROM image_history WHERE application IS NOT NULL AND application != '' ORDER BY application"
+        )
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
     finally:
         await db.close()
 
@@ -288,9 +310,9 @@ async def replace_image(
 
         await db.execute(
             """INSERT INTO image_history
-               (filename, image_name, image_tag, target_nodes, status, loaded_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (image["filename"], image.get("image_name"), image.get("image_tag"),
+               (filename, application, image_name, image_tag, target_nodes, status, loaded_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (image["filename"], image.get("application"), image.get("image_name"), image.get("image_tag"),
              target_nodes, overall_status, current_user["username"], now),
         )
         await db.commit()

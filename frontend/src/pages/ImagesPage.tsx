@@ -10,6 +10,7 @@ import { FilterSelect } from '../components/FilterBar'
 interface ImageRecord {
   id: number
   filename: string
+  application: string | null
   image_name: string
   target_nodes: string
   status: string
@@ -44,6 +45,9 @@ export default function ImagesPage() {
   const [loadModal, setLoadModal] = useState<ImageRecord | null>(null)
   const [selectedNodes, setSelectedNodes] = useState<number[]>([])
   const [loadingAction, setLoadingAction] = useState(false)
+  const [application, setApplication] = useState('')
+  const [applications, setApplications] = useState<string[]>([])
+  const [appFilter, setAppFilter] = useState('all')
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Node images state
@@ -60,12 +64,18 @@ export default function ImagesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [imgRes, nodeRes] = await Promise.all([imageApi.list(), nodeApi.list()])
+      const [imgRes, nodeRes, appRes] = await Promise.all([
+        imageApi.list(),
+        nodeApi.list(),
+        imageApi.getApplications(),
+      ])
       setImages(imgRes.data ?? [])
       setNodes(nodeRes.data ?? [])
+      setApplications(appRes.data ?? [])
     } catch {
       setImages([])
       setNodes([])
+      setApplications([])
     } finally {
       setLoading(false)
     }
@@ -77,7 +87,7 @@ export default function ImagesPage() {
     setUploading(true)
     setProgress(0)
     try {
-      await imageApi.upload(file, setProgress)
+      await imageApi.upload(file, setProgress, application.trim() || undefined)
       await fetchData()
     } catch {
       alert('업로드에 실패했습니다.')
@@ -179,7 +189,21 @@ export default function ImagesPage() {
     }
   }
 
+  const filteredImages = appFilter === 'all'
+    ? images
+    : appFilter === '__none__'
+      ? images.filter((i) => !i.application)
+      : images.filter((i) => i.application === appFilter)
+
   const uploadColumns: Column<ImageRecord>[] = [
+    {
+      key: 'application',
+      header: '어플리케이션',
+      sortable: true,
+      render: (r) => r.application
+        ? <span className="px-2 py-0.5 text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 rounded-full">{r.application}</span>
+        : <span className="text-slate-500">-</span>,
+    },
     { key: 'filename', header: '파일명', sortable: true },
     { key: 'image_name', header: '이미지명', sortable: true },
     { key: 'target_nodes', header: '대상 노드', render: (r) => <span>{r.target_nodes || '-'}</span> },
@@ -243,6 +267,23 @@ export default function ImagesPage() {
 
       {tab === 'upload' && (
         <>
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+            <label className="block text-sm text-slate-400 mb-2">
+              어플리케이션 <span className="text-slate-600">(tar 파일을 어플리케이션 단위로 묶기 위한 식별자)</span>
+            </label>
+            <input
+              type="text"
+              list="image-application-list"
+              value={application}
+              onChange={(e) => setApplication(e.target.value)}
+              placeholder="예: payment-api, user-service"
+              className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <datalist id="image-application-list">
+              {applications.map((a) => <option key={a} value={a} />)}
+            </datalist>
+          </div>
+
           <div
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
               dragActive ? 'border-blue-500 bg-blue-500/10' : 'border-slate-600 hover:border-slate-500 bg-slate-800'
@@ -277,15 +318,25 @@ export default function ImagesPage() {
           )}
 
           <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-700">
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
                 <HardDrive size={18} /> 이미지 목록
               </h2>
+              <FilterSelect
+                label="어플리케이션"
+                value={appFilter}
+                onChange={setAppFilter}
+                options={[
+                  { value: 'all', label: '전체' },
+                  { value: '__none__', label: '미지정' },
+                  ...applications.map((a) => ({ value: a, label: a })),
+                ]}
+              />
             </div>
             {loading ? (
               <LoadingSpinner text="이미지를 불러오는 중..." />
             ) : (
-              <DataTable columns={uploadColumns} data={images} keyField="id" />
+              <DataTable columns={uploadColumns} data={filteredImages} keyField="id" />
             )}
           </div>
         </>
