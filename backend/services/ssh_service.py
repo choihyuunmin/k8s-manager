@@ -25,6 +25,13 @@ class SSHService:
             connect_kwargs["key_filename"] = str(expanded)
         elif password:
             connect_kwargs["password"] = password
+        else:
+            default_keys = [Path("~/.ssh/id_rsa").expanduser(), Path("~/.ssh/id_ed25519").expanduser()]
+            found = [str(k) for k in default_keys if k.exists()]
+            if found:
+                connect_kwargs["key_filename"] = found
+            connect_kwargs["allow_agent"] = True
+            connect_kwargs["look_for_keys"] = True
 
         self._client.connect(**connect_kwargs)
 
