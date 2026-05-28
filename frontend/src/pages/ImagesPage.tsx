@@ -35,13 +35,21 @@ interface NodeImage {
 
 type TabKey = 'upload' | 'node-images'
 
+interface UploadTask {
+  id: string
+  filename: string
+  size: number
+  progress: number
+  status: 'uploading' | 'success' | 'error'
+  error?: string
+}
+
 export default function ImagesPage() {
   const [tab, setTab] = useState<TabKey>('upload')
   const [images, setImages] = useState<ImageRecord[]>([])
   const [nodes, setNodes] = useState<NodeRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [uploads, setUploads] = useState<UploadTask[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [loadModal, setLoadModal] = useState<ImageRecord | null>(null)
   const [selectedNodes, setSelectedNodes] = useState<number[]>([])
@@ -87,25 +95,46 @@ export default function ImagesPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleUpload = async (file: File) => {
-    setUploading(true)
-    setProgress(0)
+  const uploadOne = async (task: UploadTask, file: File) => {
     try {
-      await imageApi.upload(file, setProgress, application.trim() || undefined)
-      await fetchData()
-    } catch {
-      alert('업로드에 실패했습니다.')
-    } finally {
-      setUploading(false)
-      setProgress(0)
+      await imageApi.upload(
+        file,
+        (pct) => setUploads((prev) => prev.map((u) => u.id === task.id ? { ...u, progress: pct } : u)),
+        application.trim() || undefined,
+      )
+      setUploads((prev) => prev.map((u) => u.id === task.id ? { ...u, status: 'success', progress: 100 } : u))
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail
+        || (err as { message?: string })?.message
+        || '업로드 실패'
+      setUploads((prev) => prev.map((u) => u.id === task.id ? { ...u, status: 'error', error: msg } : u))
     }
+  }
+
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return
+    const newTasks: UploadTask[] = files.map((f) => ({
+      id: `${Date.now()}-${f.name}-${Math.random().toString(36).slice(2, 8)}`,
+      filename: f.name,
+      size: f.size,
+      progress: 0,
+      status: 'uploading',
+    }))
+    setUploads((prev) => [...prev, ...newTasks])
+
+    await Promise.all(newTasks.map((task, i) => uploadOne(task, files[i])))
+    await fetchData()
   }
 
   const handleDrop = (e: DragEvent) => {
     e.preventDefault()
     setDragActive(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleUpload(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) handleUploadFiles(files)
+  }
+
+  const clearCompletedUploads = () => {
+    setUploads((prev) => prev.filter((u) => u.status === 'uploading'))
   }
 
   const handleLoad = async () => {
@@ -347,22 +376,62 @@ export default function ImagesPage() {
               ref={fileRef}
               type="file"
               accept=".tar,.tar.gz,.tgz"
+              multiple
               className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleUpload(e.target.files[0]) }}
+              onChange={(e) => {
+                const files = e.target.files ? Array.from(e.target.files) : []
+                if (files.length > 0) handleUploadFiles(files)
+                if (e.target) e.target.value = ''
+              }}
             />
             <Upload size={40} className="mx-auto mb-3 text-slate-600 dark:text-slate-400" />
             <p className="text-slate-700 dark:text-slate-300 font-medium">이미지 파일을 드래그하거나 클릭하여 선택하세요</p>
-            <p className="text-sm text-slate-500 mt-1">.tar, .tar.gz, .tgz 형식 지원</p>
+            <p className="text-sm text-slate-500 mt-1">.tar, .tar.gz, .tgz 형식 지원 · 여러 파일 동시 업로드 가능</p>
           </div>
 
-          {uploading && (
+          {uploads.length > 0 && (
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-slate-700 dark:text-slate-300">업로드 중...</span>
-                <span className="text-sm text-blue-600 dark:text-blue-400">{progress}%</span>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  업로드 ({uploads.filter((u) => u.status === 'uploading').length}/{uploads.length})
+                </h3>
+                {uploads.some((u) => u.status !== 'uploading') && (
+                  <button
+                    onClick={clearCompletedUploads}
+                    className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                  >
+                    완료 항목 지우기
+                  </button>
+                )}
               </div>
-              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+              <div className="space-y-2.5 max-h-72 overflow-auto pr-1">
+                {uploads.map((u) => (
+                  <div key={u.id} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="truncate text-slate-700 dark:text-slate-300 font-mono">{u.filename}</span>
+                      <span className={`flex-shrink-0 ${
+                        u.status === 'success' ? 'text-emerald-600 dark:text-emerald-400'
+                        : u.status === 'error' ? 'text-red-600 dark:text-red-400'
+                        : 'text-blue-600 dark:text-blue-400'
+                      }`}>
+                        {u.status === 'success' ? '완료' : u.status === 'error' ? '실패' : `${u.progress}%`}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${
+                          u.status === 'success' ? 'bg-emerald-500'
+                          : u.status === 'error' ? 'bg-red-500'
+                          : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${u.status === 'error' ? 100 : u.progress}%` }}
+                      />
+                    </div>
+                    {u.status === 'error' && u.error && (
+                      <p className="text-xs text-red-600 dark:text-red-400 font-mono">{u.error}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
