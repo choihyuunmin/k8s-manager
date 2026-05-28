@@ -140,9 +140,11 @@ async def dashboard_metrics(
         if namespace:
             pods = k8s_client.list_pods(namespace)
             deployments = k8s_client.list_deployments(namespace)
+            services = k8s_client.list_services(namespace)
         else:
             pods = k8s_client.list_pods()
             deployments = k8s_client.list_deployments()
+            services = k8s_client.list_services()
         nodes = k8s_client.list_nodes()
         events = k8s_client.list_events(namespace, limit=30)
 
@@ -206,12 +208,89 @@ async def dashboard_metrics(
                 "last": e["last_timestamp"],
             })
 
+        # Service type distribution
+        svc_type_count: dict[str, int] = {}
+        for s in services:
+            svc_type_count[s.get("type") or "Unknown"] = svc_type_count.get(s.get("type") or "Unknown", 0) + 1
+        service_types = [{"name": k, "value": v} for k, v in svc_type_count.items()]
+
+        # Top container images by usage (across deployments)
+        image_count: dict[str, int] = {}
+        for d in deployments:
+            for img in d.get("images") or []:
+                short = img.split("@")[0]  # drop digest if present
+                image_count[short] = image_count.get(short, 0) + 1
+        top_images = sorted(
+            [{"name": k, "value": v} for k, v in image_count.items()],
+            key=lambda x: x["value"], reverse=True,
+        )[:8]
+
+        # Pod age buckets
+        from datetime import timezone as _tz
+        now_ts = datetime.now(_tz.utc)
+        buckets = {"<1h": 0, "1-24h": 0, "1-7d": 0, ">7d": 0}
+        for p in pods:
+            ts = p.get("created_at")
+            if not ts:
+                continue
+            try:
+                created = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                hours = (now_ts - created).total_seconds() / 3600
+                if hours < 1:
+                    buckets["<1h"] += 1
+                elif hours < 24:
+                    buckets["1-24h"] += 1
+                elif hours < 24 * 7:
+                    buckets["1-7d"] += 1
+                else:
+                    buckets[">7d"] += 1
+            except Exception:
+                continue
+        pod_age = [{"name": k, "value": v} for k, v in buckets.items()]
+
+        # DB-based: issues stats
+        db = await get_db()
+        try:
+            cursor = await db.execute(
+                "SELECT severity, COUNT(*) FROM issues WHERE status = 'open' GROUP BY severity"
+            )
+            issues_by_severity = [{"name": r[0] or "unknown", "value": r[1]} for r in await cursor.fetchall()]
+
+            cursor = await db.execute(
+                "SELECT status, COUNT(*) FROM issues GROUP BY status"
+            )
+            issues_by_status = [{"name": r[0] or "unknown", "value": r[1]} for r in await cursor.fetchall()]
+
+            # Recent activity (image uploads/loads + manifest deploys)
+            cursor = await db.execute(
+                """SELECT 'image' as kind, filename as title, status as detail, loaded_by as actor, created_at
+                   FROM image_history ORDER BY created_at DESC LIMIT 8"""
+            )
+            recent_image_activity = [dict(zip(["kind", "title", "detail", "actor", "created_at"], r)) for r in await cursor.fetchall()]
+
+            cursor = await db.execute(
+                """SELECT 'deploy' as kind,
+                   COALESCE(resource_kind || '/' || resource_name, action_type) as title,
+                   action_type as detail, deployed_by as actor, created_at
+                   FROM deploy_history ORDER BY created_at DESC LIMIT 8"""
+            )
+            recent_deploy_activity = [dict(zip(["kind", "title", "detail", "actor", "created_at"], r)) for r in await cursor.fetchall()]
+
+            recent_activity = sorted(
+                recent_image_activity + recent_deploy_activity,
+                key=lambda x: x.get("created_at") or "",
+                reverse=True,
+            )[:10]
+        finally:
+            await db.close()
+
         return {
             "totals": {
                 "nodes": len(nodes),
                 "pods": len(pods),
                 "deployments": len(deployments),
                 "running_pods": sum(1 for p in pods if p["status"] == "Running"),
+                "services": len(services),
             },
             "pod_status": pod_status,
             "pods_by_namespace": pods_by_ns,
@@ -220,6 +299,12 @@ async def dashboard_metrics(
             "deploy_summary": deploy_summary,
             "node_status": node_status,
             "recent_events": recent_events,
+            "service_types": service_types,
+            "top_images": top_images,
+            "pod_age": pod_age,
+            "issues_by_severity": issues_by_severity,
+            "issues_by_status": issues_by_status,
+            "recent_activity": recent_activity,
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"K8s cluster unavailable: {e}")

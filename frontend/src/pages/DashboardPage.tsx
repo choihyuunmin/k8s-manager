@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Server, Box, Layers, Activity, RefreshCw, Pause, Play,
-  AlertTriangle, CheckCircle, XCircle, Clock,
+  AlertTriangle, CheckCircle, XCircle, Clock, Network, Image as ImageIcon,
+  AlertCircle, Timer, Zap,
 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -12,7 +13,7 @@ import { useNamespaceParam } from '../hooks/useNamespace'
 import { useTheme } from '../hooks/useTheme'
 
 interface Metrics {
-  totals: { nodes: number; pods: number; deployments: number; running_pods: number }
+  totals: { nodes: number; pods: number; deployments: number; running_pods: number; services: number }
   pod_status: { name: string; value: number }[]
   pods_by_namespace: { name: string; value: number }[]
   top_restarts: { name: string; value: number }[]
@@ -20,6 +21,12 @@ interface Metrics {
   deploy_summary: { name: string; value: number }[]
   node_status: { name: string; status: string; roles: string }[]
   recent_events: { type: string; reason: string; message: string; namespace: string; involved: string; last: string }[]
+  service_types: { name: string; value: number }[]
+  top_images: { name: string; value: number }[]
+  pod_age: { name: string; value: number }[]
+  issues_by_severity: { name: string; value: number }[]
+  issues_by_status: { name: string; value: number }[]
+  recent_activity: { kind: string; title: string; detail: string; actor: string; created_at: string }[]
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,6 +37,21 @@ const STATUS_COLORS: Record<string, string> = {
   Unknown: '#94a3b8',
   Healthy: '#10b981',
   Unhealthy: '#ef4444',
+  ClusterIP: '#6366f1',
+  NodePort: '#10b981',
+  LoadBalancer: '#f59e0b',
+  ExternalName: '#8b5cf6',
+  critical: '#dc2626',
+  high: '#f97316',
+  medium: '#f59e0b',
+  low: '#3b82f6',
+  open: '#f59e0b',
+  resolved: '#10b981',
+  'in-progress': '#6366f1',
+  '<1h': '#10b981',
+  '1-24h': '#3b82f6',
+  '1-7d': '#f59e0b',
+  '>7d': '#94a3b8',
 }
 
 function colorFor(name: string): string {
@@ -100,7 +122,12 @@ export default function DashboardPage() {
 
   if (!metrics) return null
 
-  const { totals, pod_status, pods_by_namespace, top_restarts, deploy_health, deploy_summary, node_status, recent_events } = metrics
+  const {
+    totals, pod_status, pods_by_namespace, top_restarts, deploy_health, deploy_summary,
+    node_status, recent_events, service_types, top_images, pod_age,
+    issues_by_severity, issues_by_status, recent_activity,
+  } = metrics
+  const openIssues = issues_by_status.find((s) => s.name === 'open')?.value ?? 0
 
   const readyNodes = node_status.filter((n) => n.status === 'Ready').length
   const notReadyNodes = node_status.length - readyNodes
@@ -111,7 +138,9 @@ export default function DashboardPage() {
     { label: '노드', value: totals.nodes, sub: `${readyNodes} Ready`, icon: Server, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10' },
     { label: '파드', value: totals.pods, sub: `${totals.running_pods} Running`, icon: Box, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
     { label: '디플로이먼트', value: totals.deployments, sub: `${healthyDeploys} Healthy`, icon: Layers, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
+    { label: '서비스', value: totals.services ?? 0, sub: `${service_types.length} 종류`, icon: Network, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/10' },
     { label: '이상 상태', value: unhealthyDeploys + notReadyNodes, sub: `${unhealthyDeploys} deploy + ${notReadyNodes} node`, icon: AlertTriangle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-500/10' },
+    { label: '열린 이슈', value: openIssues, sub: `${issues_by_severity.find((s) => s.name === 'critical')?.value ?? 0} critical`, icon: AlertCircle, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-500/10' },
   ]
 
   return (
@@ -158,7 +187,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {summaryCards.map(({ label, value, sub, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
@@ -284,6 +313,106 @@ export default function DashboardPage() {
                     className="h-full bg-amber-500 transition-all"
                     style={{ width: d.desired > 0 ? `${(d.ready / d.desired) * 100}%` : '0%' }}
                   />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* Row: Service types + Pod age + Issues by severity */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ChartCard title="서비스 타입" icon={<Network size={16} className="text-purple-600 dark:text-purple-400" />}>
+          {service_types.length === 0 ? <EmptyState /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={service_types} dataKey="value" nameKey="name" outerRadius={75} innerRadius={40} paddingAngle={2}>
+                  {service_types.map((entry) => (
+                    <Cell key={entry.name} fill={colorFor(entry.name)} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ color: axisColor, fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Pod 생성 시점 분포" icon={<Timer size={16} className="text-blue-600 dark:text-blue-400" />}>
+          {pod_age.every((b) => b.value === 0) ? <EmptyState /> : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={pod_age}>
+                <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} stroke={axisColor} />
+                <YAxis tick={{ fill: axisColor, fontSize: 11 }} stroke={axisColor} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {pod_age.map((entry) => (
+                    <Cell key={entry.name} fill={colorFor(entry.name)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="열린 이슈 (심각도별)" icon={<AlertCircle size={16} className="text-orange-600 dark:text-orange-400" />}>
+          {issues_by_severity.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px] text-sm text-emerald-600 dark:text-emerald-400">
+              <CheckCircle size={16} className="mr-1.5" /> 열린 이슈 없음
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={issues_by_severity}>
+                <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fill: axisColor, fontSize: 11 }} stroke={axisColor} />
+                <YAxis tick={{ fill: axisColor, fontSize: 11 }} stroke={axisColor} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {issues_by_severity.map((entry) => (
+                    <Cell key={entry.name} fill={colorFor(entry.name)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Row: Top images + Recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="이미지 사용 순위 (Deployment 기준)" icon={<ImageIcon size={16} className="text-indigo-600 dark:text-indigo-400" />}>
+          {top_images.length === 0 ? <EmptyState /> : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={top_images} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
+                <XAxis type="number" tick={{ fill: axisColor, fontSize: 11 }} stroke={axisColor} />
+                <YAxis dataKey="name" type="category" tick={{ fill: axisColor, fontSize: 10 }} width={200} stroke={axisColor} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="최근 활동" icon={<Zap size={16} className="text-emerald-600 dark:text-emerald-400" />}>
+          <div className="space-y-1.5 max-h-[260px] overflow-auto pr-1">
+            {recent_activity.length === 0 ? <EmptyState /> : recent_activity.map((a, i) => (
+              <div key={i} className="flex items-start gap-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 mt-0.5 ${
+                  a.kind === 'image'
+                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-400'
+                    : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                }`}>
+                  {a.kind}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-800 dark:text-slate-200 truncate">
+                    {a.title} <span className="text-slate-500">· {a.detail}</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {a.actor || '-'} · {a.created_at}
+                  </p>
                 </div>
               </div>
             ))}
