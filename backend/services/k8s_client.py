@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
 from typing import Optional, Generator
 from pathlib import Path
 
+import yaml
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
@@ -281,6 +283,106 @@ class K8sClient:
         for c in (pod_obj.spec.init_containers or []):
             containers.append({"name": c.name, "image": c.image, "type": "init_container"})
         return containers
+
+    def get_resource_yaml(self, kind: str, name: str, namespace: str) -> str:
+        kind_lower = kind.lower()
+        if kind_lower == "deployment":
+            resource = self.apps_v1.read_namespaced_deployment(name, namespace)
+        elif kind_lower == "statefulset":
+            resource = self.apps_v1.read_namespaced_stateful_set(name, namespace)
+        elif kind_lower == "daemonset":
+            resource = self.apps_v1.read_namespaced_daemon_set(name, namespace)
+        elif kind_lower == "service":
+            resource = self.core_v1.read_namespaced_service(name, namespace)
+        elif kind_lower == "configmap":
+            resource = self.core_v1.read_namespaced_config_map(name, namespace)
+        elif kind_lower == "secret":
+            resource = self.core_v1.read_namespaced_secret(name, namespace)
+        elif kind_lower == "pod":
+            resource = self.core_v1.read_namespaced_pod(name, namespace)
+        else:
+            raise ValueError(f"Unsupported kind: {kind}")
+
+        resource_dict = client.ApiClient().sanitize_for_serialization(resource)
+
+        metadata = resource_dict.get("metadata", {})
+        for key in ["managedFields", "resourceVersion", "uid", "creationTimestamp", "generation"]:
+            metadata.pop(key, None)
+        annotations = metadata.get("annotations", {})
+        if annotations:
+            annotations.pop("kubectl.kubernetes.io/last-applied-configuration", None)
+        resource_dict.pop("status", None)
+
+        return yaml.dump(resource_dict, default_flow_style=False, allow_unicode=True)
+
+    def find_deployments_by_image(self, image_name: str, namespace: Optional[str] = None) -> list[dict]:
+        if namespace:
+            deps = self.apps_v1.list_namespaced_deployment(namespace)
+        else:
+            deps = self.apps_v1.list_deployment_for_all_namespaces()
+        result = []
+        for dep in deps.items:
+            images = [c.image for c in (dep.spec.template.spec.containers or [])]
+            if any(image_name in img for img in images):
+                result.append({
+                    "name": dep.metadata.name,
+                    "namespace": dep.metadata.namespace,
+                    "images": images,
+                })
+        return result
+
+    def rollout_restart_deployment(self, name: str, namespace: str) -> dict:
+        body = {
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": datetime.now(timezone.utc).isoformat()
+                        }
+                    }
+                }
+            }
+        }
+        self.apps_v1.patch_namespaced_deployment(name, namespace, body)
+        return {"status": "restarted", "message": f"Deployment {namespace}/{name} rollout restart triggered"}
+
+    def list_statefulsets(self, namespace: Optional[str] = None) -> list[dict]:
+        if namespace:
+            sts_list = self.apps_v1.list_namespaced_stateful_set(namespace)
+        else:
+            sts_list = self.apps_v1.list_stateful_set_for_all_namespaces()
+        result = []
+        for sts in sts_list.items:
+            result.append({
+                "name": sts.metadata.name,
+                "namespace": sts.metadata.namespace,
+                "replicas": sts.spec.replicas or 0,
+                "ready_replicas": sts.status.ready_replicas or 0,
+                "images": [
+                    c.image for c in (sts.spec.template.spec.containers or [])
+                ],
+                "created_at": sts.metadata.creation_timestamp.isoformat() if sts.metadata.creation_timestamp else "",
+            })
+        return result
+
+    def list_daemonsets(self, namespace: Optional[str] = None) -> list[dict]:
+        if namespace:
+            ds_list = self.apps_v1.list_namespaced_daemon_set(namespace)
+        else:
+            ds_list = self.apps_v1.list_daemon_set_for_all_namespaces()
+        result = []
+        for ds in ds_list.items:
+            result.append({
+                "name": ds.metadata.name,
+                "namespace": ds.metadata.namespace,
+                "desired_number_scheduled": ds.status.desired_number_scheduled or 0,
+                "number_ready": ds.status.number_ready or 0,
+                "images": [
+                    c.image for c in (ds.spec.template.spec.containers or [])
+                ],
+                "created_at": ds.metadata.creation_timestamp.isoformat() if ds.metadata.creation_timestamp else "",
+            })
+        return result
 
 
 k8s_client = K8sClient()

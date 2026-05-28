@@ -39,6 +39,8 @@ export const clusterApi = {
   getEvents: (namespace?: string) => client.get('/api/cluster/events', { params: { namespace } }),
   getNamespaces: () => client.get<{ name: string; status: string }[]>('/api/cluster/namespaces'),
   getSummary: () => client.get('/api/cluster/summary'),
+  getResourceYaml: (kind: string, name: string, namespace: string) =>
+    client.get<{ yaml: string; kind: string; name: string; namespace: string }>('/api/cluster/resource/yaml', { params: { kind, name, namespace } }),
 }
 
 export const imageApi = {
@@ -55,6 +57,9 @@ export const imageApi = {
   list: () => client.get('/api/images'),
   load: (imageId: number, nodeIds: number[]) =>
     client.post(`/api/images/${imageId}/load`, { node_ids: nodeIds }),
+  getNodeImages: (nodeId: number) => client.get('/api/images/node/' + nodeId + '/list'),
+  replace: (data: { image_id: number; node_ids: number[]; target_image: string; restart_deployments: boolean }) =>
+    client.post('/api/images/replace', data),
 }
 
 export const manifestApi = {

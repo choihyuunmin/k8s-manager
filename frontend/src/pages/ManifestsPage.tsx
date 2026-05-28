@@ -6,6 +6,7 @@ import DataTable, { type Column } from '../components/DataTable'
 import FilterBar from '../components/FilterBar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { useNamespaceParam } from '../hooks/useNamespace'
 
 interface Manifest {
   id: string
@@ -18,6 +19,7 @@ interface Manifest {
 }
 
 export default function ManifestsPage() {
+  const nsParam = useNamespaceParam()
   const [manifests, setManifests] = useState<Manifest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -59,6 +61,7 @@ export default function ManifestsPage() {
   }
 
   const filtered = manifests.filter((m) => {
+    if (nsParam && m.namespace !== nsParam) return false
     if (!search) return true
     return m.name.toLowerCase().includes(search.toLowerCase()) ||
       m.kind.toLowerCase().includes(search.toLowerCase())

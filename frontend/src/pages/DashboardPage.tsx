@@ -5,6 +5,7 @@ import FilterBar, { FilterSelect } from '../components/FilterBar'
 import DataTable, { type Column } from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useNamespaceParam } from '../hooks/useNamespace'
 
 interface Summary {
   nodes: number
@@ -25,29 +26,23 @@ interface Resource {
 const PRESET_KEY = 'k8s-dashboard-presets'
 
 export default function DashboardPage() {
+  const nsParam = useNamespaceParam()
   const [summary, setSummary] = useState<Summary>({ nodes: 0, pods: 0, deployments: 0, services: 0 })
   const [resources, setResources] = useState<Resource[]>([])
-  const [namespaces, setNamespaces] = useState<string[]>([])
-  const [namespace, setNamespace] = useState('all')
   const [kind, setKind] = useState('pods')
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const [presets, setPresets] = useState<{ name: string; namespace: string; kind: string; status: string }[]>(() => {
+  const [presets, setPresets] = useState<{ name: string; kind: string; status: string }[]>(() => {
     const stored = localStorage.getItem(PRESET_KEY)
     return stored ? JSON.parse(stored) : []
   })
 
   const fetchData = useCallback(async () => {
     try {
-      const [sumRes, nsRes] = await Promise.all([
-        clusterApi.getSummary(),
-        clusterApi.getNamespaces(),
-      ])
+      const sumRes = await clusterApi.getSummary()
       setSummary(sumRes.data)
-      const names = (nsRes.data ?? []).map((ns: { name: string }) => ns.name)
-      setNamespaces(names)
     } catch {
       // backend not available
     }
@@ -56,13 +51,12 @@ export default function DashboardPage() {
   const fetchResources = useCallback(async () => {
     setLoading(true)
     try {
-      const ns = namespace === 'all' ? undefined : namespace
       let res
       switch (kind) {
         case 'nodes': res = await clusterApi.getNodes(); break
-        case 'deployments': res = await clusterApi.getDeployments(ns); break
-        case 'services': res = await clusterApi.getServices(ns); break
-        default: res = await clusterApi.getPods(ns); break
+        case 'deployments': res = await clusterApi.getDeployments(nsParam); break
+        case 'services': res = await clusterApi.getServices(nsParam); break
+        default: res = await clusterApi.getPods(nsParam); break
       }
       setResources(res.data ?? [])
     } catch {
@@ -70,7 +64,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [namespace, kind])
+  }, [nsParam, kind])
 
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchResources() }, [fetchResources])
@@ -98,13 +92,12 @@ export default function DashboardPage() {
   const savePreset = () => {
     const name = prompt('프리셋 이름을 입력하세요:')
     if (!name) return
-    const updated = [...presets, { name, namespace, kind, status: statusFilter }]
+    const updated = [...presets, { name, kind, status: statusFilter }]
     setPresets(updated)
     localStorage.setItem(PRESET_KEY, JSON.stringify(updated))
   }
 
-  const loadPreset = (p: { namespace: string; kind: string; status: string }) => {
-    setNamespace(p.namespace)
+  const loadPreset = (p: { kind: string; status: string }) => {
     setKind(p.kind)
     setStatusFilter(p.status)
   }
@@ -152,12 +145,6 @@ export default function DashboardPage() {
       </div>
 
       <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="리소스 이름 검색...">
-        <FilterSelect
-          label="네임스페이스"
-          value={namespace}
-          onChange={setNamespace}
-          options={[{ value: 'all', label: '전체' }, ...namespaces.map((n) => ({ value: n, label: n }))]}
-        />
         <FilterSelect
           label="종류"
           value={kind}

@@ -11,8 +11,10 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Globe,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useNamespace } from '../hooks/useNamespace'
 
 interface SidebarProps {
   collapsed: boolean
@@ -32,6 +34,7 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user, logout } = useAuth()
+  const { namespace, namespaces, setNamespace } = useNamespace()
 
   return (
     <aside
@@ -49,6 +52,28 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
+      </div>
+
+      <div className="px-3 py-3 border-b border-slate-700">
+        {collapsed ? (
+          <div className="flex justify-center">
+            <Globe size={18} className="text-slate-400" />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs text-slate-500 mb-1.5 px-1">네임스페이스</label>
+            <select
+              value={namespace}
+              onChange={(e) => setNamespace(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-sm bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+            >
+              <option value="all">전체</option>
+              {namespaces.map((ns) => (
+                <option key={ns} value={ns}>{ns}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 py-4 space-y-1 overflow-y-auto">

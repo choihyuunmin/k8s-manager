@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from auth.auth import get_current_user
 from config import settings
 from database import get_db
+from services.k8s_client import k8s_client
 from services.ssh_service import SSHService
 
 router = APIRouter(prefix="/api/images", tags=["images"])
@@ -16,6 +18,13 @@ router = APIRouter(prefix="/api/images", tags=["images"])
 
 class LoadRequest(BaseModel):
     node_ids: list[int]
+
+
+class ReplaceRequest(BaseModel):
+    image_id: int
+    node_ids: list[int]
+    target_image: str
+    restart_deployments: bool = True
 
 
 @router.post("/upload")
@@ -136,5 +145,160 @@ async def delete_image(image_id: int, current_user: dict = Depends(get_current_u
         await db.execute("DELETE FROM image_history WHERE id = ?", (image_id,))
         await db.commit()
         return {"message": "Deleted"}
+    finally:
+        await db.close()
+
+
+@router.get("/node/{node_id}/list")
+async def list_node_images(node_id: int, current_user: dict = Depends(get_current_user)):
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+        node_row = await cursor.fetchone()
+        if node_row is None:
+            raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+        node = dict(node_row)
+    finally:
+        await db.close()
+
+    ssh = SSHService()
+    try:
+        ssh.connect(
+            host=node["host"],
+            port=node.get("port", 22),
+            username=node.get("username", "root"),
+            key_path=node.get("ssh_key_path"),
+            password=node.get("password"),
+        )
+
+        # Try docker
+        stdout, stderr, exit_code = ssh.execute_command(
+            "docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'"
+        )
+        if exit_code == 0 and stdout.strip():
+            images = []
+            for line in stdout.strip().splitlines():
+                parts = line.split(None, 3)
+                if len(parts) >= 3:
+                    repo_tag = parts[0].split(":", 1)
+                    images.append({
+                        "repository": repo_tag[0],
+                        "tag": repo_tag[1] if len(repo_tag) > 1 else "<none>",
+                        "id": parts[1],
+                        "size": parts[2],
+                    })
+            return images
+
+        # Try crictl
+        stdout, stderr, exit_code = ssh.execute_command("crictl images -o json")
+        if exit_code == 0 and stdout.strip():
+            data = json.loads(stdout)
+            images = []
+            for img in data.get("images", []):
+                repo_tags = img.get("repoTags", [])
+                repo_tag = repo_tags[0] if repo_tags else "<none>:<none>"
+                parts = repo_tag.split(":", 1)
+                images.append({
+                    "repository": parts[0],
+                    "tag": parts[1] if len(parts) > 1 else "<none>",
+                    "id": img.get("id", ""),
+                    "size": img.get("size", ""),
+                })
+            return images
+
+        # Try ctr
+        stdout, stderr, exit_code = ssh.execute_command("ctr -n k8s.io images list")
+        if exit_code == 0 and stdout.strip():
+            images = []
+            lines = stdout.strip().splitlines()
+            for line in lines[1:]:  # skip header
+                parts = line.split()
+                if len(parts) >= 4:
+                    ref = parts[0]
+                    ref_parts = ref.split(":", 1)
+                    images.append({
+                        "repository": ref_parts[0],
+                        "tag": ref_parts[1] if len(ref_parts) > 1 else "<none>",
+                        "id": parts[2] if len(parts) > 2 else "",
+                        "size": parts[3] if len(parts) > 3 else "",
+                    })
+            return images
+
+        raise HTTPException(
+            status_code=500,
+            detail="No container runtime found (tried docker, crictl, ctr)",
+        )
+    finally:
+        ssh.close()
+
+
+@router.post("/replace")
+async def replace_image(
+    req: ReplaceRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM image_history WHERE id = ?", (req.image_id,))
+        image_row = await cursor.fetchone()
+        if image_row is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+        image = dict(image_row)
+
+        file_path = Path(settings.UPLOAD_DIR) / image["filename"]
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File {image['filename']} not found on disk")
+
+        nodes = []
+        for node_id in req.node_ids:
+            cursor = await db.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+            node = await cursor.fetchone()
+            if node is None:
+                raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+            nodes.append(dict(node))
+
+        # Load image to all nodes
+        load_results = []
+        for node in nodes:
+            ssh = SSHService()
+            try:
+                result = ssh.load_image(str(file_path), node)
+                load_results.append(result)
+            except Exception as e:
+                load_results.append({"status": "failed", "node": node["host"], "message": str(e)})
+
+        # Restart deployments if requested
+        restart_results = []
+        if req.restart_deployments:
+            deployments = k8s_client.find_deployments_by_image(req.target_image)
+            for dep in deployments:
+                try:
+                    result = k8s_client.rollout_restart_deployment(dep["name"], dep["namespace"])
+                    restart_results.append(result)
+                except Exception as e:
+                    restart_results.append({
+                        "status": "failed",
+                        "message": f"Failed to restart {dep['namespace']}/{dep['name']}: {str(e)}",
+                    })
+
+        # Record in history
+        target_nodes = ",".join(str(n) for n in req.node_ids)
+        overall_status = "replaced" if all(r["status"] == "success" for r in load_results) else "partial_failure"
+        now = datetime.now(timezone.utc).isoformat()
+
+        await db.execute(
+            """INSERT INTO image_history
+               (filename, image_name, image_tag, target_nodes, status, loaded_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (image["filename"], image.get("image_name"), image.get("image_tag"),
+             target_nodes, overall_status, current_user["username"], now),
+        )
+        await db.commit()
+
+        return {
+            "status": overall_status,
+            "load_results": load_results,
+            "restart_results": restart_results,
+        }
     finally:
         await db.close()

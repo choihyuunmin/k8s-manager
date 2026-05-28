@@ -3,10 +3,10 @@ import { Play, Square, Trash2, Download, Search } from 'lucide-react'
 import { logsApi } from '../api/client'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { FilterSelect } from '../components/FilterBar'
-import { clusterApi } from '../api/client'
+import { useNamespace } from '../hooks/useNamespace'
 
 export default function LogsPage() {
-  const [namespaces, setNamespaces] = useState<string[]>([])
+  const { namespace: globalNs, namespaces } = useNamespace()
   const [pods, setPods] = useState<string[]>([])
   const [containers, setContainers] = useState<string[]>([])
   const [namespace, setNamespace] = useState('')
@@ -18,11 +18,10 @@ export default function LogsPage() {
   const { messages, isConnected, connect, disconnect, clear } = useWebSocket()
 
   useEffect(() => {
-    clusterApi.getNamespaces().then((r) => {
-      const names = (r.data ?? []).map((ns: { name: string }) => ns.name)
-      setNamespaces(names)
-    }).catch(() => {})
-  }, [])
+    if (globalNs !== 'all') {
+      setNamespace(globalNs)
+    }
+  }, [globalNs])
 
   useEffect(() => {
     if (namespace) {

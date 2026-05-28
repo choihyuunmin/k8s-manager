@@ -94,3 +94,19 @@ async def list_events(
         return k8s_client.list_events(namespace, limit)
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/resource/yaml")
+async def get_resource_yaml(
+    kind: str = Query(...),
+    name: str = Query(...),
+    namespace: str = Query("default"),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        yaml_string = k8s_client.get_resource_yaml(kind, name, namespace)
+        return {"yaml": yaml_string, "kind": kind, "name": name, "namespace": namespace}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
