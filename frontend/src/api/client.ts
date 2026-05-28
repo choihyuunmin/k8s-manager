@@ -63,6 +63,8 @@ export const imageApi = {
     client.post('/api/images/replace', data),
   getApplications: () => client.get<string[]>('/api/images/applications'),
   delete: (imageId: number) => client.delete(`/api/images/${imageId}`),
+  deleteNodeImage: (nodeId: number, imageRef: string) =>
+    client.delete(`/api/images/node/${nodeId}/image`, { params: { image_ref: imageRef } }),
 }
 
 export const manifestApi = {

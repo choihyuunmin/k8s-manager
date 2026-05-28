@@ -50,6 +50,7 @@ export default function ImagesPage() {
   const [applications, setApplications] = useState<string[]>([])
   const [appFilter, setAppFilter] = useState('all')
   const [deleteTarget, setDeleteTarget] = useState<ImageRecord | null>(null)
+  const [deleteNodeImageTarget, setDeleteNodeImageTarget] = useState<NodeImage | null>(null)
   const [nodeImagesError, setNodeImagesError] = useState<string>('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -161,6 +162,21 @@ export default function ImagesPage() {
     }
   }
 
+  const handleDeleteNodeImage = async () => {
+    if (!deleteNodeImageTarget || !selectedNodeId) return
+    const imageRef = deleteNodeImageTarget.tag && deleteNodeImageTarget.tag !== '<none>'
+      ? `${deleteNodeImageTarget.repository}:${deleteNodeImageTarget.tag}`
+      : (deleteNodeImageTarget.id || deleteNodeImageTarget.repository)
+    try {
+      await imageApi.deleteNodeImage(selectedNodeId, imageRef)
+      setDeleteNodeImageTarget(null)
+      fetchNodeImages(selectedNodeId)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '노드 이미지 삭제에 실패했습니다.')
+    }
+  }
+
   const handleNodeSelect = (val: string) => {
     const id = Number(val)
     if (id) {
@@ -257,12 +273,21 @@ export default function ImagesPage() {
       key: 'actions',
       header: '액션',
       render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); openReplaceModal(r) }}
-          className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
-        >
-          <RefreshCw size={12} /> 교체
-        </button>
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => openReplaceModal(r)}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+          >
+            <RefreshCw size={12} /> 교체
+          </button>
+          <button
+            onClick={() => setDeleteNodeImageTarget(r)}
+            title="노드에서 삭제"
+            className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       ),
     },
   ]
@@ -555,6 +580,15 @@ export default function ImagesPage() {
         onConfirm={handleDelete}
         title="이미지 삭제"
         message={`"${deleteTarget?.filename}" 이미지를 삭제하시겠습니까? 파일과 이력이 모두 제거됩니다.`}
+        confirmText="삭제"
+      />
+
+      <ConfirmDialog
+        open={!!deleteNodeImageTarget}
+        onClose={() => setDeleteNodeImageTarget(null)}
+        onConfirm={handleDeleteNodeImage}
+        title="노드 이미지 삭제"
+        message={`"${deleteNodeImageTarget?.repository}${deleteNodeImageTarget?.tag && deleteNodeImageTarget.tag !== '<none>' ? ':' + deleteNodeImageTarget.tag : ''}" 이미지를 이 노드에서 제거하시겠습니까?`}
         confirmText="삭제"
       />
     </div>

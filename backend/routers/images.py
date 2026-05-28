@@ -304,6 +304,64 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
         ssh.close()
 
 
+@router.delete("/node/{node_id}/image")
+async def delete_node_image(
+    node_id: int,
+    image_ref: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Remove an image from a node. image_ref is like 'repo:tag' or an image ID."""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+        node_row = await cursor.fetchone()
+        if node_row is None:
+            raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
+        node = dict(node_row)
+    finally:
+        await db.close()
+
+    ssh = SSHService()
+    errors = []
+    try:
+        ssh.connect(
+            host=node["host"],
+            port=node.get("port", 22),
+            username=node.get("username", "root"),
+            key_path=node.get("ssh_key_path"),
+            password=node.get("password"),
+        )
+        user = ssh.username
+
+        attempts = [
+            ("crictl", with_sudo(f"crictl rmi {image_ref}", user)),
+            ("docker", with_sudo(f"docker rmi {image_ref}", user)),
+            ("podman", with_sudo(f"podman rmi {image_ref}", user)),
+            ("ctr", with_sudo(f"ctr -n k8s.io images rm {image_ref}", user)),
+        ]
+        for name, cmd in attempts:
+            stdout, stderr, exit_code = ssh.execute_command(cmd)
+            if exit_code == 0:
+                return {
+                    "status": "success",
+                    "runtime": name,
+                    "output": stdout.strip(),
+                    "image_ref": image_ref,
+                }
+            errors.append(f"{name}: {(stderr or '').strip() or f'exit {exit_code}'}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to remove image '{image_ref}'. Errors: {' | '.join(errors)}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SSH/runtime error: {e}")
+    finally:
+        ssh.close()
+
+
 @router.post("/replace")
 async def replace_image(
     req: ReplaceRequest,
