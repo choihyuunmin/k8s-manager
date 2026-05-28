@@ -43,6 +43,11 @@ export const clusterApi = {
     client.get<{ yaml: string; kind: string; name: string; namespace: string }>('/api/cluster/resource/yaml', { params: { kind, name, namespace } }),
 }
 
+export const dashboardApi = {
+  getMetrics: (namespace?: string) =>
+    client.get('/api/dashboard/metrics', { params: { namespace } }),
+}
+
 export const imageApi = {
   upload: (file: File, onProgress?: (pct: number) => void, application?: string) => {
     const form = new FormData()
