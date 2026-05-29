@@ -118,7 +118,7 @@ async def init_db():
         row = await cursor.fetchone()
         if row[0] == 0:
             from datetime import datetime, timezone
-            password_hash = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+            password_hash = bcrypt.hashpw(settings.ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
             await db.execute(
                 "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
                 ("admin", password_hash, datetime.now(timezone.utc).isoformat()),
