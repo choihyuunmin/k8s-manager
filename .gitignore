@@ -15,6 +15,7 @@ backend/uploads/
 
 # Env
 .env
+.secret_key
 
 # OS
 .DS_Store
