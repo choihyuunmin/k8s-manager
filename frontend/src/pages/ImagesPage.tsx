@@ -278,13 +278,37 @@ export default function ImagesPage() {
       const uploadRes = await imageApi.upload(replaceFile, setReplaceProgress)
       const imageId = uploadRes.data.id
       const targetImage = replaceModal.repository + (replaceModal.tag && replaceModal.tag !== '<none>' ? ':' + replaceModal.tag : '')
-      await imageApi.replace({
+      const replaceRes = await imageApi.replace({
         image_id: imageId,
         node_ids: replaceNodes,
         target_image: targetImage,
         restart_deployments: true,
       })
-      alert('이미지 교체 및 재기동이 완료되었습니다.')
+
+      const loadResults = replaceRes.data.load_results ?? []
+      const restartResults = replaceRes.data.restart_results ?? []
+      const loadOk = loadResults.filter((r: { status: string }) => r.status === 'success')
+      const loadFail = loadResults.filter((r: { status: string }) => r.status === 'failed')
+      const restartOk = restartResults.filter((r: { status: string }) => r.status === 'restarted')
+      const restartFail = restartResults.filter((r: { status: string }) => r.status === 'failed')
+
+      const lines: string[] = []
+      if (loadFail.length === 0) {
+        lines.push(`✓ 이미지 로드: ${loadOk.length}개 노드 성공`)
+      } else {
+        const failHosts = loadFail.map((r: { node?: string }) => r.node ?? '?').join(', ')
+        lines.push(`✗ 이미지 로드: ${loadOk.length}개 성공 / ${loadFail.length}개 실패 (${failHosts})`)
+      }
+
+      if (restartResults.length === 0) {
+        lines.push(`⚠ 재기동된 Deployment 없음 — 이 이미지(${targetImage})를 사용하는 Deployment를 찾지 못했습니다. 파드가 재기동되지 않아 변경이 적용되지 않았을 수 있습니다.`)
+      } else if (restartFail.length === 0) {
+        lines.push(`✓ 재기동: ${restartOk.length}개 Deployment`)
+      } else {
+        lines.push(`✗ 재기동: ${restartOk.length}개 성공 / ${restartFail.length}개 실패`)
+      }
+
+      alert(lines.join('\n'))
       setReplaceModal(null)
       if (selectedNodeId) fetchNodeImages(selectedNodeId)
       await fetchData()
