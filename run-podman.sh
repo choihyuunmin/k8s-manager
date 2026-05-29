@@ -9,6 +9,9 @@ PORT=${PORT:-8000}
 # 기본은 로컬호스트만 노출(외부 인터페이스로 공개하지 않음).
 # 외부에 공개하려면 BIND_ADDR=0.0.0.0 으로 명시(역프록시/인증 보강 권장).
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
+# 컨테이너 실행 사용자. 비우면 이미지 기본(비root app).
+# rootful podman 환경에서 root 소유(600) kubeconfig를 읽으려면 CONTAINER_USER=root 로 지정.
+CONTAINER_USER=${CONTAINER_USER:-}
 
 SCRIPT_DIR="$(dirname "$0")"
 
@@ -62,7 +65,13 @@ fi
 # 사전 검증 통과 후에만 기존 컨테이너 정리
 podman rm -f "$NAME" 2>/dev/null || true
 
+USER_OPT=()
+if [ -n "$CONTAINER_USER" ]; then
+    USER_OPT=(--user "$CONTAINER_USER")
+fi
+
 exec podman run -d --name "$NAME" \
+  "${USER_OPT[@]}" \
   -p "${BIND_ADDR}:${PORT}:8000" \
   -v "${KUBECONFIG_SRC}:/config/kube:ro,z" \
   -v "${SSH_DIR}:/home/app/.ssh:ro,z" \
