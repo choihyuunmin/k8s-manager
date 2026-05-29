@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Download, RefreshCw, Trash2, AlertCircle, Search } from 'lucide-react'
-import { clusterApi, manifestApi } from '../api/client'
+import { Download, RefreshCw, Trash2, AlertCircle, Search, TerminalSquare } from 'lucide-react'
+import { clusterApi, manifestApi, logsApi } from '../api/client'
+import PodTerminal from '../components/PodTerminal'
 import FilterBar from '../components/FilterBar'
 import DataTable, { type Column } from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
@@ -52,6 +53,10 @@ export default function ClusterPage() {
   const [bulkPodDeleteOpen, setBulkPodDeleteOpen] = useState(false)
   const [describeTarget, setDescribeTarget] = useState<PodDescribe | null>(null)
   const [describing, setDescribing] = useState<string | null>(null)
+  const [shellTarget, setShellTarget] = useState<{ namespace: string; name: string } | null>(null)
+  const [shellContainers, setShellContainers] = useState<string[]>([])
+  const [shellContainer, setShellContainer] = useState<string>('')
+  const [openingShell, setOpeningShell] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -163,6 +168,27 @@ export default function ClusterPage() {
     }
   }
 
+  const handleOpenShell = async (row: Record<string, unknown>) => {
+    const name = String(row.name)
+    const ns = String(row.namespace || 'default')
+    const key = `${ns}/${name}`
+    setOpeningShell(key)
+    try {
+      const res = await logsApi.getContainers(ns, name)
+      const names = (res.data as { name: string; type: string }[])
+        .filter((c) => c.type !== 'init_container')
+        .map((c) => c.name)
+      setShellContainers(names)
+      setShellContainer(names[0] ?? '')
+      setShellTarget({ namespace: ns, name })
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(detail || '컨테이너 목록 조회에 실패했습니다.')
+    } finally {
+      setOpeningShell(null)
+    }
+  }
+
   const handleDescribe = async (row: Record<string, unknown>) => {
     const name = String(row.name)
     const ns = String(row.namespace || 'default')
@@ -224,6 +250,13 @@ export default function ClusterPage() {
           className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded transition-colors"
         >
           <Search size={12} /> {describing === key ? '...' : '원인 보기'}
+        </button>
+        <button
+          onClick={() => handleOpenShell(r)}
+          disabled={openingShell === key}
+          className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white rounded transition-colors"
+        >
+          <TerminalSquare size={12} /> {openingShell === key ? '...' : '셸'}
         </button>
         <button
           onClick={() => setPodDeleteTarget(r)}
@@ -502,6 +535,39 @@ export default function ClusterPage() {
                 </div>
               )}
             </section>
+          </div>
+        )}
+      </Modal>
+
+      {/* Pod web shell (kubectl exec) modal */}
+      <Modal
+        open={!!shellTarget}
+        onClose={() => setShellTarget(null)}
+        title={shellTarget ? `셸 — ${shellTarget.namespace}/${shellTarget.name}` : ''}
+        width="max-w-4xl"
+      >
+        {shellTarget && (
+          <div className="space-y-3">
+            {shellContainers.length > 1 && (
+              <div className="flex items-center gap-2 text-sm">
+                <label className="text-slate-600 dark:text-slate-400">컨테이너</label>
+                <select
+                  value={shellContainer}
+                  onChange={(e) => setShellContainer(e.target.value)}
+                  className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded"
+                >
+                  {shellContainers.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <PodTerminal
+              key={`${shellTarget.namespace}/${shellTarget.name}/${shellContainer}`}
+              namespace={shellTarget.namespace}
+              pod={shellTarget.name}
+              container={shellContainer || undefined}
+            />
           </div>
         )}
       </Modal>

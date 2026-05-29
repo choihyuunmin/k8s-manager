@@ -10,6 +10,7 @@ from auth.auth import router as auth_router
 from database import init_db
 from routers.cluster import router as cluster_router
 from routers.dashboard import router as dashboard_router
+from routers.exec import router as exec_router
 from routers.history import router as history_router
 from routers.images import router as images_router
 from routers.issues import router as issues_router
@@ -39,6 +40,7 @@ app.include_router(cluster_router)
 app.include_router(images_router)
 app.include_router(manifests_router)
 app.include_router(logs_router)
+app.include_router(exec_router)
 app.include_router(issues_router)
 app.include_router(dashboard_router)
 app.include_router(history_router)
