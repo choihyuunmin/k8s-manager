@@ -4,9 +4,15 @@ from typing import Optional, Tuple
 import paramiko
 
 
-def with_sudo(cmd: str, username: Optional[str]) -> str:
-    """Prefix `sudo -n` when connected as non-root (relies on NOPASSWD sudoers)."""
+def with_sudo(cmd: str, username: Optional[str], sudo_password: Optional[str] = None) -> str:
+    """root 가 아니면 sudo 를 붙인다.
+
+    - sudo_password 가 있으면 `sudo -S -p '' ...` (암호를 표준입력으로 받음).
+    - 없으면 `sudo -n ...` (무인 모드, NOPASSWD sudoers 전제 — 기존 동작).
+    """
     if username and username != "root":
+        if sudo_password:
+            return f"sudo -S -p '' {cmd}"
         return f"sudo -n {cmd}"
     return cmd
 
@@ -48,10 +54,18 @@ class SSHService:
     def username(self) -> Optional[str]:
         return self._username
 
-    def execute_command(self, command: str) -> Tuple[str, str, int]:
+    def execute_command(self, command: str, stdin_input: Optional[str] = None) -> Tuple[str, str, int]:
         if self._client is None:
             raise RuntimeError("SSH not connected")
         stdin, stdout, stderr = self._client.exec_command(command, timeout=300)
+        if stdin_input is not None:
+            # `sudo -S` 용: 암호를 표준입력으로 전달한 뒤 닫는다.
+            try:
+                stdin.write(stdin_input + "\n")
+                stdin.flush()
+                stdin.channel.shutdown_write()
+            except Exception:
+                pass
         exit_code = stdout.channel.recv_exit_status()
         return stdout.read().decode("utf-8"), stderr.read().decode("utf-8"), exit_code
 
@@ -80,18 +94,21 @@ class SSHService:
             self.upload_file(local_tar_path, remote_path)
 
             user = self._username
+            sudo_pw = node_info.get("sudo_password") or None
+            # sudo -S 를 쓸 때만 암호를 표준입력으로 전달한다(root 면 sudo 자체를 안 씀).
+            stdin_pw = sudo_pw if (user and user != "root" and sudo_pw) else None
             # NOTE: `crictl` has no `load` subcommand. The runtimes that can import a tar archive are:
             # - podman (default storage shared with CRI-O on most RHEL/CentOS/Rocky distros)
             # - ctr  (containerd runtime, requires -n k8s.io to populate kubelet's namespace)
             # - docker (legacy)
             attempts = [
-                ("podman", with_sudo(f"podman load -i {remote_path}", user)),
-                ("ctr",    with_sudo(f"ctr -n k8s.io images import {remote_path}", user)),
-                ("docker", with_sudo(f"docker load -i {remote_path}", user)),
+                ("podman", with_sudo(f"podman load -i {remote_path}", user, sudo_pw)),
+                ("ctr",    with_sudo(f"ctr -n k8s.io images import {remote_path}", user, sudo_pw)),
+                ("docker", with_sudo(f"docker load -i {remote_path}", user, sudo_pw)),
             ]
             errors = []
             for name, cmd in attempts:
-                stdout, stderr, exit_code = self.execute_command(cmd)
+                stdout, stderr, exit_code = self.execute_command(cmd, stdin_input=stdin_pw)
                 if exit_code == 0:
                     self.execute_command(f"rm -f {remote_path}")
                     return {

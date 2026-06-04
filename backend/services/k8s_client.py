@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream
 
 from config import settings
 
@@ -362,6 +363,26 @@ class K8sClient:
                 yield line.decode("utf-8", errors="replace")
             else:
                 yield line
+
+    def exec_stream(self, namespace: str, pod: str, container: Optional[str] = None):
+        """파드 컨테이너에 대화형 exec 스트림을 연다.
+
+        bash가 있으면 bash, 없으면 sh로 폴백한다. 반환값은 살아있는 동기
+        WSClient로, 호출 측에서 read_stdout/write_stdin/close 등을 직접 다룬다.
+        """
+        kwargs = {
+            "name": pod,
+            "namespace": namespace,
+            "command": ["/bin/sh", "-c", "exec /bin/bash 2>/dev/null || exec /bin/sh"],
+            "stderr": True,
+            "stdin": True,
+            "stdout": True,
+            "tty": True,
+            "_preload_content": False,
+        }
+        if container:
+            kwargs["container"] = container
+        return stream(self.core_v1.connect_get_namespaced_pod_exec, **kwargs)
 
     def list_pod_containers(self, namespace: str, pod: str) -> list[dict]:
         pod_obj = self.core_v1.read_namespaced_pod(pod, namespace)

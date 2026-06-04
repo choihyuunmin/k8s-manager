@@ -119,9 +119,9 @@ export const historyApi = {
 
 export const nodeApi = {
   list: () => client.get('/api/nodes'),
-  create: (data: { name: string; host: string; port: number; username: string; password?: string }) =>
+  create: (data: { name: string; host: string; port: number; username: string; password?: string; sudo_password?: string }) =>
     client.post('/api/nodes', data),
-  update: (id: string, data: Partial<{ name: string; host: string; port: number; username: string; password?: string }>) =>
+  update: (id: string, data: Partial<{ name: string; host: string; port: number; username: string; password?: string; sudo_password?: string }>) =>
     client.put(`/api/nodes/${id}`, data),
   delete: (id: string) => client.delete(`/api/nodes/${id}`),
   testConnection: (id: string) => client.post(`/api/nodes/${id}/test`),
