@@ -71,8 +71,8 @@ export const imageApi = {
     })
   },
   list: () => client.get('/api/images'),
-  load: (imageId: number, nodeIds: number[]) =>
-    client.post(`/api/images/${imageId}/load`, { node_ids: nodeIds }),
+  load: (imageId: number, nodeIds: number[], sudoPassword?: string) =>
+    client.post(`/api/images/${imageId}/load`, { node_ids: nodeIds, sudo_password: sudoPassword || undefined }),
   getNodeImages: (nodeId: number) => client.get('/api/images/node/' + nodeId + '/list'),
   replace: (data: { image_id: number; node_ids: number[]; target_image: string; restart_deployments: boolean }) =>
     client.post('/api/images/replace', data),

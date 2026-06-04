@@ -18,6 +18,9 @@ router = APIRouter(prefix="/api/images", tags=["images"])
 
 class LoadRequest(BaseModel):
     node_ids: list[int]
+    # 로드 시점에 입력한 sudo 비밀번호. 비우면 노드에 저장된 sudo_password 사용,
+    # 그것도 없으면 sudo -n(NOPASSWD) 으로 시도.
+    sudo_password: Optional[str] = None
 
 
 class ReplaceRequest(BaseModel):
@@ -133,7 +136,11 @@ async def load_image_by_id(
             node = await cursor.fetchone()
             if node is None:
                 raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
-            nodes.append(dict(node))
+            nd = dict(node)
+            # 로드 대화상자에서 입력한 비밀번호가 있으면 노드 저장값보다 우선.
+            if req.sudo_password:
+                nd["sudo_password"] = req.sudo_password
+            nodes.append(nd)
 
         results = []
         for node in nodes:
