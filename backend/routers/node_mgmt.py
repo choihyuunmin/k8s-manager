@@ -19,6 +19,7 @@ class NodeCreate(BaseModel):
     auth_type: str = "key"
     ssh_key_path: Optional[str] = None
     password: Optional[str] = None
+    sudo_password: Optional[str] = None
 
 
 class NodeUpdate(BaseModel):
@@ -29,6 +30,7 @@ class NodeUpdate(BaseModel):
     auth_type: Optional[str] = None
     ssh_key_path: Optional[str] = None
     password: Optional[str] = None
+    sudo_password: Optional[str] = None
 
 
 @router.get("")
@@ -48,9 +50,9 @@ async def create_node(req: NodeCreate, current_user: dict = Depends(get_current_
     db = await get_db()
     try:
         await db.execute(
-            """INSERT INTO nodes (name, host, port, username, auth_type, ssh_key_path, password, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (req.name, req.host, req.port, req.username, req.auth_type, req.ssh_key_path, req.password, now),
+            """INSERT INTO nodes (name, host, port, username, auth_type, ssh_key_path, password, sudo_password, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (req.name, req.host, req.port, req.username, req.auth_type, req.ssh_key_path, req.password, req.sudo_password, now),
         )
         await db.commit()
         cursor = await db.execute("SELECT last_insert_rowid()")

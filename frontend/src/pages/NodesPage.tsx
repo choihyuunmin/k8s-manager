@@ -24,7 +24,7 @@ export default function NodesPage() {
   const [modal, setModal] = useState(false)
   const [editTarget, setEditTarget] = useState<NodeRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<NodeRecord | null>(null)
-  const [form, setForm] = useState({ name: '', host: '', port: 22, username: '', password: '' })
+  const [form, setForm] = useState({ name: '', host: '', port: 22, username: '', password: '', sudo_password: '' })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [selected, setSelected] = useState<Array<string | number>>([])
@@ -47,13 +47,13 @@ export default function NodesPage() {
 
   const openCreate = () => {
     setEditTarget(null)
-    setForm({ name: '', host: '', port: 22, username: '', password: '' })
+    setForm({ name: '', host: '', port: 22, username: '', password: '', sudo_password: '' })
     setModal(true)
   }
 
   const openEdit = (node: NodeRecord) => {
     setEditTarget(node)
-    setForm({ name: node.name, host: node.host, port: node.port, username: node.username, password: '' })
+    setForm({ name: node.name, host: node.host, port: node.port, username: node.username, password: '', sudo_password: '' })
     setModal(true)
   }
 
@@ -64,7 +64,7 @@ export default function NodesPage() {
     }
     setSaving(true)
     try {
-      const data = { ...form, password: form.password || undefined }
+      const data = { ...form, password: form.password || undefined, sudo_password: form.sudo_password || undefined }
       if (editTarget) {
         await nodeApi.update(editTarget.id, data)
       } else {
@@ -288,14 +288,27 @@ export default function NodesPage() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">비밀번호</label>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">비밀번호 (SSH 접속용)</label>
             <input
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={editTarget ? '변경하지 않으려면 비워두세요' : '비밀번호'}
+              placeholder={editTarget ? '변경하지 않으려면 비워두세요' : 'SSH 로그인 비밀번호'}
               className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">sudo 비밀번호 (선택)</label>
+            <input
+              type="password"
+              value={form.sudo_password}
+              onChange={(e) => setForm({ ...form, sudo_password: e.target.value })}
+              placeholder={editTarget ? '변경하지 않으려면 비워두세요' : 'root가 아닐 때 podman/ctr 실행용'}
+              className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              비root 사용자로 접속해 이미지를 로드할 때 sudo 암호로 사용됩니다. root 접속이거나 NOPASSWD sudo면 비워두세요.
+            </p>
           </div>
         </div>
       </Modal>

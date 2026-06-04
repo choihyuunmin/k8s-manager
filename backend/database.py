@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     auth_type TEXT DEFAULT 'key',
     ssh_key_path TEXT,
     password TEXT,
+    sudo_password TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -113,6 +114,11 @@ async def init_db():
         columns = [row[1] for row in await cursor.fetchall()]
         if "application" not in columns:
             await db.execute("ALTER TABLE image_history ADD COLUMN application TEXT")
+
+        cursor = await db.execute("PRAGMA table_info(nodes)")
+        node_columns = [row[1] for row in await cursor.fetchall()]
+        if "sudo_password" not in node_columns:
+            await db.execute("ALTER TABLE nodes ADD COLUMN sudo_password TEXT")
 
         cursor = await db.execute("SELECT COUNT(*) FROM users WHERE username = 'admin'")
         row = await cursor.fetchone()
