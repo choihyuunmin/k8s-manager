@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type DragEvent } from 'react'
 import { Upload, HardDrive, Play, RefreshCw, Server, Trash2, Info } from 'lucide-react'
-import { imageApi, nodeApi } from '../api/client'
+import { clusterApi, imageApi, nodeApi } from '../api/client'
 import DataTable, { type Column } from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -23,7 +23,29 @@ interface ImageRecord {
 interface NodeRecord {
   id: number
   name: string
+  host: string
+  port?: number
+  username?: string
   [key: string]: unknown
+}
+
+interface ClusterNodeRecord {
+  name: string
+  internal_ip?: string
+  status?: string
+  roles?: string
+  [key: string]: unknown
+}
+
+interface NodeTarget {
+  key: string
+  name: string
+  host?: string
+  roles?: string
+  status?: string
+  sshNodeId?: number
+  registered: boolean
+  inCluster: boolean
 }
 
 interface NodeImage {
@@ -43,9 +65,12 @@ interface UploadTask {
   error?: string
 }
 
+const normalizeNodeKey = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
 export default function ImagesPage() {
   const [images, setImages] = useState<ImageRecord[]>([])
   const [nodes, setNodes] = useState<NodeRecord[]>([])
+  const [clusterNodes, setClusterNodes] = useState<ClusterNodeRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [uploads, setUploads] = useState<UploadTask[]>([])
   const [dragActive, setDragActive] = useState(false)
@@ -80,24 +105,90 @@ export default function ImagesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [imgRes, nodeRes, appRes] = await Promise.all([
+      const [imgRes, nodeRes, appRes, clusterNodeRes] = await Promise.allSettled([
         imageApi.list(),
         nodeApi.list(),
         imageApi.getApplications(),
+        clusterApi.getNodes(),
       ])
-      setImages(imgRes.data ?? [])
-      setNodes(nodeRes.data ?? [])
-      setApplications(appRes.data ?? [])
-    } catch {
-      setImages([])
-      setNodes([])
-      setApplications([])
+      setImages(imgRes.status === 'fulfilled' ? imgRes.value.data ?? [] : [])
+      setNodes(nodeRes.status === 'fulfilled' ? nodeRes.value.data ?? [] : [])
+      setApplications(appRes.status === 'fulfilled' ? appRes.value.data ?? [] : [])
+      setClusterNodes(clusterNodeRes.status === 'fulfilled' ? clusterNodeRes.value.data ?? [] : [])
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const nodeTargets = useMemo<NodeTarget[]>(() => {
+    const sshNodeByIdentity = new Map<string, NodeRecord>()
+    for (const node of nodes) {
+      for (const identity of [node.name, node.host]) {
+        const key = normalizeNodeKey(identity)
+        if (key && !sshNodeByIdentity.has(key)) sshNodeByIdentity.set(key, node)
+      }
+    }
+
+    const matchedSshNodeIds = new Set<number>()
+    const targets: NodeTarget[] = clusterNodes.map((node) => {
+      const sshNode = sshNodeByIdentity.get(normalizeNodeKey(node.name))
+        ?? sshNodeByIdentity.get(normalizeNodeKey(node.internal_ip))
+      if (sshNode) matchedSshNodeIds.add(sshNode.id)
+
+      return {
+        key: `cluster:${node.name}`,
+        name: node.name,
+        host: node.internal_ip,
+        roles: node.roles,
+        status: node.status,
+        sshNodeId: sshNode?.id,
+        registered: Boolean(sshNode),
+        inCluster: true,
+      }
+    })
+
+    for (const node of nodes) {
+      if (matchedSshNodeIds.has(node.id)) continue
+      targets.push({
+        key: `ssh:${node.id}`,
+        name: node.name,
+        host: node.host,
+        sshNodeId: node.id,
+        registered: true,
+        inCluster: false,
+      })
+    }
+
+    return targets
+  }, [clusterNodes, nodes])
+
+  const loadableNodeIds = useMemo(
+    () => nodeTargets
+      .map((target) => target.sshNodeId)
+      .filter((id): id is number => id !== undefined),
+    [nodeTargets],
+  )
+
+  const missingClusterNodeTargets = useMemo(
+    () => nodeTargets.filter((target) => target.inCluster && !target.registered),
+    [nodeTargets],
+  )
+
+  const nodeTargetOptions = useMemo(() => [
+    { value: '', label: '선택...' },
+    ...nodeTargets.map((target) => ({
+      value: target.sshNodeId !== undefined ? String(target.sshNodeId) : `missing:${target.key}`,
+      label: [
+        target.name,
+        target.host ? `(${target.host})` : null,
+        target.registered ? null : 'SSH 미등록',
+        !target.inCluster ? '클러스터 미확인' : null,
+      ].filter(Boolean).join(' '),
+      disabled: target.sshNodeId === undefined,
+    })),
+  ], [nodeTargets])
 
   const uploadOne = async (task: UploadTask, file: File) => {
     try {
@@ -237,6 +328,85 @@ export default function ImagesPage() {
 
   const toggleBulkLoadNode = (id: number) => {
     setBulkLoadNodes((prev) => prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id])
+  }
+
+  const areAllLoadableNodesSelected = (selected: number[]) =>
+    loadableNodeIds.length > 0 && loadableNodeIds.every((id) => selected.includes(id))
+
+  const renderNodeTargetNotice = () => {
+    if (missingClusterNodeTargets.length === 0) return null
+
+    return (
+      <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+        클러스터 노드 {clusterNodes.length}개 중 SSH 등록 노드 {clusterNodes.length - missingClusterNodeTargets.length}개만 로드할 수 있습니다.
+        미등록 노드: {missingClusterNodeTargets.map((n) => n.name).join(', ')}
+      </div>
+    )
+  }
+
+  const renderNodeTargetList = (
+    selected: number[],
+    onToggle: (id: number) => void,
+    accent: 'blue' | 'amber' = 'blue',
+  ) => {
+    const accentClass = accent === 'amber' ? 'text-amber-500 focus:ring-amber-500' : 'text-blue-500 focus:ring-blue-500'
+
+    return (
+      <div className="space-y-2 max-h-60 overflow-auto">
+        {nodeTargets.map((target) => {
+          const id = target.sshNodeId
+          const disabled = id === undefined
+          const statusClass = target.status === 'Ready'
+            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+            : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30'
+
+          return (
+            <label
+              key={target.key}
+              className={`flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg transition-colors ${
+                disabled ? 'cursor-not-allowed opacity-75' : 'cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              <input
+                type="checkbox"
+                disabled={disabled}
+                checked={id !== undefined && selected.includes(id)}
+                onChange={() => { if (id !== undefined) onToggle(id) }}
+                className={`w-4 h-4 rounded border-slate-300 dark:border-slate-600 ${accentClass} focus:ring-offset-0 bg-white dark:bg-slate-800 disabled:opacity-50`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{target.name}</span>
+                  {target.roles && (
+                    <span className="px-1.5 py-0.5 text-[11px] rounded border border-slate-400/30 text-slate-600 dark:text-slate-300">
+                      {target.roles}
+                    </span>
+                  )}
+                  {target.status && (
+                    <span className={`px-1.5 py-0.5 text-[11px] rounded border ${statusClass}`}>
+                      {target.status}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
+                  {target.host || '호스트 정보 없음'}
+                </span>
+              </span>
+              <span className={`flex-shrink-0 px-2 py-0.5 text-[11px] rounded-full border ${
+                target.registered
+                  ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
+              }`}>
+                {target.registered ? 'SSH 등록' : 'SSH 미등록'}
+              </span>
+            </label>
+          )
+        })}
+        {nodeTargets.length === 0 && (
+          <p className="text-sm text-slate-500 text-center py-4">표시할 노드가 없습니다.</p>
+        )}
+      </div>
+    )
   }
 
   const handleDeleteNodeImage = async () => {
@@ -559,8 +729,8 @@ export default function ImagesPage() {
           <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
             <Info size={16} className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-blue-800 dark:text-blue-200">
-              마스터 노드를 포함한 모든 노드는 <strong>SSH 노드 관리</strong>에서 먼저 등록되어 있어야 조회 가능합니다.
-              컨테이너 런타임 명령(crictl, ctr)은 root 권한이 필요할 수 있습니다.
+              클러스터 노드는 모두 표시되지만 이미지 로드, 교체, 삭제는 <strong>SSH 노드 관리</strong>에 등록된 노드에서만 실행할 수 있습니다.
+              로컬 tar 이미지는 파드가 실행될 수 있는 모든 노드의 컨테이너 런타임에 로드해야 합니다.
             </p>
           </div>
 
@@ -569,10 +739,7 @@ export default function ImagesPage() {
               label="노드 선택"
               value={selectedNodeId ? String(selectedNodeId) : ''}
               onChange={handleNodeSelect}
-              options={[
-                { value: '', label: '선택...' },
-                ...nodes.map((n) => ({ value: String(n.id), label: n.name })),
-              ]}
+              options={nodeTargetOptions}
             />
             {selectedNodeId && (
               <button
@@ -630,23 +797,20 @@ export default function ImagesPage() {
           </>
         }
       >
-        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">이미지를 로드할 노드를 선택하세요.</p>
-        <div className="space-y-2 max-h-60 overflow-auto">
-          {nodes.map((n) => (
-            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
-              <input
-                type="checkbox"
-                checked={selectedNodes.includes(n.id)}
-                onChange={() => toggleNode(n.id)}
-                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 bg-white dark:bg-slate-800"
-              />
-              <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
-            </label>
-          ))}
-          {nodes.length === 0 && (
-            <p className="text-sm text-slate-500 text-center py-4">등록된 노드가 없습니다.</p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-slate-600 dark:text-slate-400">이미지를 로드할 노드를 선택하세요.</p>
+          {loadableNodeIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedNodes((prev) => areAllLoadableNodesSelected(prev) ? [] : loadableNodeIds)}
+              className="px-2.5 py-1.5 text-xs bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded transition-colors"
+            >
+              {areAllLoadableNodesSelected(selectedNodes) ? '전체 해제' : `로드 가능 ${loadableNodeIds.length}개 선택`}
+            </button>
           )}
         </div>
+        {renderNodeTargetNotice()}
+        {renderNodeTargetList(selectedNodes, toggleNode)}
         <div className="mt-4">
           <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">sudo 비밀번호 (선택)</label>
           <input
@@ -727,20 +891,20 @@ export default function ImagesPage() {
             )}
 
             <div>
-              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-2">대상 노드</label>
-              <div className="space-y-2 max-h-40 overflow-auto">
-                {nodes.map((n) => (
-                  <label key={n.id} className="flex items-center gap-3 p-2.5 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={replaceNodes.includes(n.id)}
-                      onChange={() => toggleReplaceNode(n.id)}
-                      className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-0 bg-white dark:bg-slate-800"
-                    />
-                    <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
-                  </label>
-                ))}
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <label className="block text-sm text-slate-600 dark:text-slate-400">대상 노드</label>
+                {loadableNodeIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setReplaceNodes((prev) => areAllLoadableNodesSelected(prev) ? [] : loadableNodeIds)}
+                    className="px-2.5 py-1.5 text-xs bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded transition-colors"
+                  >
+                    {areAllLoadableNodesSelected(replaceNodes) ? '전체 해제' : `로드 가능 ${loadableNodeIds.length}개 선택`}
+                  </button>
+                )}
               </div>
+              {renderNodeTargetNotice()}
+              {renderNodeTargetList(replaceNodes, toggleReplaceNode, 'amber')}
             </div>
 
             <p className="text-xs text-slate-500">
@@ -799,20 +963,20 @@ export default function ImagesPage() {
           </>
         }
       >
-        <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">선택한 이미지를 로드할 노드를 선택하세요.</p>
-        <div className="space-y-2 max-h-60 overflow-auto">
-          {nodes.map((n) => (
-            <label key={n.id} className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
-              <input
-                type="checkbox"
-                checked={bulkLoadNodes.includes(n.id)}
-                onChange={() => toggleBulkLoadNode(n.id)}
-                className="w-4 h-4 rounded border-slate-400 dark:border-slate-600 text-blue-500"
-              />
-              <span className="text-sm text-slate-800 dark:text-slate-200">{n.name}</span>
-            </label>
-          ))}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-slate-600 dark:text-slate-400">선택한 이미지를 로드할 노드를 선택하세요.</p>
+          {loadableNodeIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setBulkLoadNodes((prev) => areAllLoadableNodesSelected(prev) ? [] : loadableNodeIds)}
+              className="px-2.5 py-1.5 text-xs bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded transition-colors"
+            >
+              {areAllLoadableNodesSelected(bulkLoadNodes) ? '전체 해제' : `로드 가능 ${loadableNodeIds.length}개 선택`}
+            </button>
+          )}
         </div>
+        {renderNodeTargetNotice()}
+        {renderNodeTargetList(bulkLoadNodes, toggleBulkLoadNode)}
       </Modal>
     </div>
   )

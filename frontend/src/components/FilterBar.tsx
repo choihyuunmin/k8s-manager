@@ -31,7 +31,7 @@ export default function FilterBar({ searchValue, onSearchChange, searchPlacehold
 interface FilterSelectProps {
   value: string
   onChange: (val: string) => void
-  options: { value: string; label: string }[]
+  options: { value: string; label: string; disabled?: boolean }[]
   label?: string
 }
 
@@ -45,7 +45,7 @@ export function FilterSelect({ value, onChange, options, label }: FilterSelectPr
         className="px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
         ))}
       </select>
     </div>
