@@ -197,7 +197,14 @@ async def bulk_rollout_restart(
     for item in req.items:
         try:
             res = k8s_client.rollout_restart(item.name, item.namespace, item.kind)
-            results.append({"status": "success", **res, "kind": item.kind, "namespace": item.namespace, "name": item.name})
+            results.append({
+                **res,
+                "rollout_status": res.get("status"),
+                "status": "success",
+                "kind": item.kind,
+                "namespace": item.namespace,
+                "name": item.name,
+            })
         except Exception as e:
             results.append({
                 "status": "failed",

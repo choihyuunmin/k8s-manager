@@ -76,7 +76,6 @@ export default function ImagesPage() {
   const [dragActive, setDragActive] = useState(false)
   const [loadModal, setLoadModal] = useState<ImageRecord | null>(null)
   const [selectedNodes, setSelectedNodes] = useState<number[]>([])
-  const [sudoPassword, setSudoPassword] = useState('')
   const [loadingAction, setLoadingAction] = useState(false)
   const [application, setApplication] = useState('')
   const [applications, setApplications] = useState<string[]>([])
@@ -236,7 +235,7 @@ export default function ImagesPage() {
     if (!loadModal || selectedNodes.length === 0) return
     setLoadingAction(true)
     try {
-      const res = await imageApi.load(loadModal.id, selectedNodes, sudoPassword)
+      const res = await imageApi.load(loadModal.id, selectedNodes)
       const results: { status: string; node: string; message?: string; runtime?: string; output?: string }[] = res.data?.results ?? []
       const failed = results.filter((r) => r.status !== 'success')
       const succeeded = results.filter((r) => r.status === 'success')
@@ -251,7 +250,6 @@ export default function ImagesPage() {
       }
       setLoadModal(null)
       setSelectedNodes([])
-      setSudoPassword('')
       await fetchData()
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -777,12 +775,12 @@ export default function ImagesPage() {
       {/* Load Modal */}
       <Modal
         open={!!loadModal}
-        onClose={() => { setLoadModal(null); setSudoPassword('') }}
+        onClose={() => setLoadModal(null)}
         title="이미지 로드 - 대상 노드 선택"
         footer={
           <>
             <button
-              onClick={() => { setLoadModal(null); setSudoPassword('') }}
+              onClick={() => setLoadModal(null)}
               className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
             >
               취소
@@ -811,19 +809,8 @@ export default function ImagesPage() {
         </div>
         {renderNodeTargetNotice()}
         {renderNodeTargetList(selectedNodes, toggleNode)}
-        <div className="mt-4">
-          <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">sudo 비밀번호 (선택)</label>
-          <input
-            type="password"
-            value={sudoPassword}
-            onChange={(e) => setSudoPassword(e.target.value)}
-            placeholder="비root 사용자로 로드할 때 입력 (root/NOPASSWD면 비워두세요)"
-            autoComplete="off"
-            className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
-          />
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            비우면 노드에 저장된 sudo 비밀번호를 사용합니다.
-          </p>
+        <div className="mt-4 rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-xs text-blue-800 dark:text-blue-200">
+          노드 관리에 등록된 sudo 비밀번호를 대상 노드별로 사용합니다. 값이 없는 노드는 NOPASSWD sudo로 시도합니다.
         </div>
       </Modal>
 

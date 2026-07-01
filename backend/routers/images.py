@@ -18,8 +18,8 @@ router = APIRouter(prefix="/api/images", tags=["images"])
 
 class LoadRequest(BaseModel):
     node_ids: list[int]
-    # 로드 시점에 입력한 sudo 비밀번호. 비우면 노드에 저장된 sudo_password 사용,
-    # 그것도 없으면 sudo -n(NOPASSWD) 으로 시도.
+    # Legacy fallback only. Node-specific sudo_password stored in node
+    # management always takes precedence.
     sudo_password: Optional[str] = None
 
 
@@ -28,6 +28,16 @@ class ReplaceRequest(BaseModel):
     node_ids: list[int]
     target_image: str
     restart_deployments: bool = True
+
+
+def node_sudo_password(node: dict, fallback: Optional[str] = None) -> Optional[str]:
+    return node.get("sudo_password") or fallback or None
+
+
+def sudo_stdin_password(username: Optional[str], sudo_password: Optional[str]) -> Optional[str]:
+    if username and username != "root" and sudo_password:
+        return sudo_password
+    return None
 
 
 @router.post("/upload")
@@ -137,9 +147,7 @@ async def load_image_by_id(
             if node is None:
                 raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
             nd = dict(node)
-            # 로드 대화상자에서 입력한 비밀번호가 있으면 노드 저장값보다 우선.
-            if req.sudo_password:
-                nd["sudo_password"] = req.sudo_password
+            nd["sudo_password"] = node_sudo_password(nd, req.sudo_password)
             nodes.append(nd)
 
         results = []
@@ -244,10 +252,13 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
             password=node.get("password"),
         )
         user = ssh.username
+        sudo_pw = node_sudo_password(node)
+        stdin_pw = sudo_stdin_password(user, sudo_pw)
 
         # Try docker
         stdout, stderr, exit_code = ssh.execute_command(
-            with_sudo("docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'", user)
+            with_sudo("docker images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}} {{.CreatedAt}}'", user, sudo_pw),
+            stdin_input=stdin_pw,
         )
         if exit_code == 0:
             runtime_available = True
@@ -270,7 +281,8 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
 
         # Try podman
         stdout, stderr, exit_code = ssh.execute_command(
-            with_sudo("podman images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'", user)
+            with_sudo("podman images --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'", user, sudo_pw),
+            stdin_input=stdin_pw,
         )
         if exit_code == 0:
             runtime_available = True
@@ -292,7 +304,10 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
             errors.append(f"podman: {(stderr or '').strip() or f'exit {exit_code}'}")
 
         # Try crictl
-        stdout, stderr, exit_code = ssh.execute_command(with_sudo("crictl images -o json", user))
+        stdout, stderr, exit_code = ssh.execute_command(
+            with_sudo("crictl images -o json", user, sudo_pw),
+            stdin_input=stdin_pw,
+        )
         if exit_code == 0:
             runtime_available = True
             if stdout.strip():
@@ -317,7 +332,10 @@ async def list_node_images(node_id: int, current_user: dict = Depends(get_curren
             errors.append(f"crictl: {(stderr or '').strip() or f'exit {exit_code}'}")
 
         # Try ctr
-        stdout, stderr, exit_code = ssh.execute_command(with_sudo("ctr -n k8s.io images list", user))
+        stdout, stderr, exit_code = ssh.execute_command(
+            with_sudo("ctr -n k8s.io images list", user, sudo_pw),
+            stdin_input=stdin_pw,
+        )
         if exit_code == 0:
             runtime_available = True
             lines = stdout.strip().splitlines()
@@ -381,15 +399,17 @@ async def delete_node_image(
             password=node.get("password"),
         )
         user = ssh.username
+        sudo_pw = node_sudo_password(node)
+        stdin_pw = sudo_stdin_password(user, sudo_pw)
 
         attempts = [
-            ("crictl", with_sudo(f"crictl rmi {image_ref}", user)),
-            ("docker", with_sudo(f"docker rmi {image_ref}", user)),
-            ("podman", with_sudo(f"podman rmi {image_ref}", user)),
-            ("ctr", with_sudo(f"ctr -n k8s.io images rm {image_ref}", user)),
+            ("crictl", with_sudo(f"crictl rmi {image_ref}", user, sudo_pw)),
+            ("docker", with_sudo(f"docker rmi {image_ref}", user, sudo_pw)),
+            ("podman", with_sudo(f"podman rmi {image_ref}", user, sudo_pw)),
+            ("ctr", with_sudo(f"ctr -n k8s.io images rm {image_ref}", user, sudo_pw)),
         ]
         for name, cmd in attempts:
-            stdout, stderr, exit_code = ssh.execute_command(cmd)
+            stdout, stderr, exit_code = ssh.execute_command(cmd, stdin_input=stdin_pw)
             if exit_code == 0:
                 return {
                     "status": "success",
