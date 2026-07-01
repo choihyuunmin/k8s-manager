@@ -31,7 +31,7 @@ class ReplaceRequest(BaseModel):
 
 
 def node_sudo_password(node: dict, fallback: Optional[str] = None) -> Optional[str]:
-    return node.get("sudo_password") or fallback or None
+    return node.get("sudo_password") or node.get("password") or fallback or None
 
 
 def sudo_stdin_password(username: Optional[str], sudo_password: Optional[str]) -> Optional[str]:

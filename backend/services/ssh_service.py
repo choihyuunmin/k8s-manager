@@ -94,7 +94,7 @@ class SSHService:
             self.upload_file(local_tar_path, remote_path)
 
             user = self._username
-            sudo_pw = node_info.get("sudo_password") or None
+            sudo_pw = node_info.get("sudo_password") or node_info.get("password") or None
             # sudo -S 를 쓸 때만 암호를 표준입력으로 전달한다(root 면 sudo 자체를 안 씀).
             stdin_pw = sudo_pw if (user and user != "root" and sudo_pw) else None
             # NOTE: `crictl` has no `load` subcommand. The runtimes that can import a tar archive are:

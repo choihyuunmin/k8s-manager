@@ -810,7 +810,7 @@ export default function ImagesPage() {
         {renderNodeTargetNotice()}
         {renderNodeTargetList(selectedNodes, toggleNode)}
         <div className="mt-4 rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-xs text-blue-800 dark:text-blue-200">
-          노드 관리에 등록된 sudo 비밀번호를 대상 노드별로 사용합니다. 값이 없는 노드는 NOPASSWD sudo로 시도합니다.
+          노드 관리에 등록된 sudo 비밀번호를 대상 노드별로 사용합니다. 값이 없으면 SSH 비밀번호를 sudo 입력값으로 사용하고, 둘 다 없으면 NOPASSWD sudo로 시도합니다.
         </div>
       </Modal>
 
